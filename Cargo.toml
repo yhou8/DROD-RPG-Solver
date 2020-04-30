@@ -1,5 +1,5 @@
 [package]
-name = "DROD-RPG-Solver"
+name = "drod-rpg-solver"
 version = "0.1.0"
 authors = ["Yusheng Hou <yhou2000@gmail.com>"]
 edition = "2018"

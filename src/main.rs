@@ -1,19 +1,16 @@
 #[macro_use]
 extern crate bitflags;
-
 extern crate rust_dense_bitset;
 
-mod essplayer;
-mod level;
-mod search;
-mod stat;
+mod drod;
+use drod::{EssPlayer, Level, PlayerStat, Search};
 
 fn main() {
-    let init_stat = stat::PlayerStat::default();
+    let init_stat = PlayerStat::default();
     loop {
-        let level = level::Level::new();
-        let mut search = search::Search::new(level, init_stat);
-        let _ = essplayer::EssPlayer::with_stat(init_stat);
+        let level = Level::new();
+        let mut search = Search::new(level, init_stat);
+        let _init_player = EssPlayer::with_stat(init_stat);
         search.search();
     }
 }

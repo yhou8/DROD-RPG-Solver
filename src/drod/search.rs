@@ -2,9 +2,9 @@ use std::collections::{HashMap, VecDeque};
 
 use rust_dense_bitset::DenseBitSet as BitSet;
 
-use crate::essplayer::EssPlayer;
-use crate::level::Level;
-use crate::stat::PlayerStat;
+use super::essplayer::EssPlayer;
+use super::level::Level;
+use super::stat::PlayerStat;
 
 pub struct Search {
     level: Level,

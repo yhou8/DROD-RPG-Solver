@@ -2,7 +2,7 @@ use std::usize;
 
 use rust_dense_bitset::DenseBitSet as BitSet;
 
-use crate::stat::PlayerStat;
+use super::stat::PlayerStat;
 
 #[derive(Debug)]
 pub struct EssPlayer {
@@ -13,7 +13,7 @@ pub struct EssPlayer {
 }
 
 impl EssPlayer {
-    pub fn new() -> Self {
+    pub(super) fn new() -> Self {
         Self {
             stat: PlayerStat::default(),
             neighbors: BitSet::new(),

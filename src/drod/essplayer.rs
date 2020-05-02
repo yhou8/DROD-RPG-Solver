@@ -3,8 +3,8 @@ use std::usize;
 use rust_dense_bitset::BitSet as _;
 use rust_dense_bitset::DenseBitSet as BitSet;
 
+use super::stat::{PlayerStat, ProbeStat};
 use super::Level;
-use super::PlayerStat;
 
 #[derive(Clone, Copy, Debug)]
 pub struct EssPlayer {
@@ -30,6 +30,14 @@ impl EssPlayer {
             stat,
             ..EssPlayer::new()
         }
+    }
+
+    pub(super) fn previous_visited(&self) -> BitSet {
+        todo!()
+    }
+
+    pub(super) fn visit(&mut self, id: usize, level: &Level, probe: &ProbeStat) {
+        todo!()
     }
 
     pub(super) fn enter(&mut self, level: &Level) {

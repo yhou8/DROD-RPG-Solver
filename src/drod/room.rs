@@ -1,4 +1,4 @@
-use super::stat::{PlayerStat, StatDiff};
+use super::stat::{EssStat, PlayerStat, ProbeStat, StatDiff};
 
 bitflags! {
     pub(super) struct RoomType: u32 {
@@ -20,4 +20,10 @@ pub(super) struct Room {
     name: String,
     content: Vec<RoomElement>,
     pub(super) room_type: RoomType,
+}
+
+impl Room {
+    pub(super) fn to_probe_stat(&self, player: &EssStat) -> ProbeStat {
+        todo!()
+    }
 }

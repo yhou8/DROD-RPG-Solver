@@ -1,6 +1,7 @@
 mod bitset_iter;
 mod essplayer;
 mod level;
+mod player;
 mod room;
 mod search;
 mod stat;

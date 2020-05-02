@@ -12,7 +12,7 @@ bitflags! {
 #[derive(Clone, Copy, Debug, Default)]
 pub(super) struct StatDiff {
     behavior: PlayerBehavior,
-    hp: i32,
+    pub(super) hp: i32,
     atk: i32,
     def: i32,
     gr: i32,
@@ -23,7 +23,14 @@ pub(super) struct StatDiff {
 
 impl StatDiff {
     pub(super) fn ge(&self, other: &Self) -> bool {
-        todo!()
+        self.behavior.contains(other.behavior)
+            && self.hp >= other.hp
+            && self.atk >= other.atk
+            && self.def >= other.def
+            && self.gr >= other.gr
+            && self.yk >= other.yk
+            && self.gk >= other.gk
+            && self.bk >= other.bk
     }
 }
 
@@ -32,7 +39,7 @@ impl StatDiff {
 #[derive(Clone, Copy, Debug, Default)]
 pub struct PlayerStat {
     behavior: PlayerBehavior,
-    hp: i32,
+    pub(super) hp: i32,
     atk: i32,
     def: i32,
     gr: i32,
@@ -42,8 +49,36 @@ pub struct PlayerStat {
 }
 
 impl PlayerStat {
-    pub(super) fn ge(&self, other: &Self) -> bool {
+    pub(super) fn score(&self) -> i32 {
         todo!()
+    }
+
+    pub(super) fn ge(&self, other: &Self) -> bool {
+        self.behavior.contains(other.behavior)
+            && self.hp >= other.hp
+            && self.atk >= other.atk
+            && self.def >= other.def
+            && self.gr >= other.gr
+            && self.yk >= other.yk
+            && self.gk >= other.gk
+            && self.bk >= other.bk
+    }
+}
+
+#[derive(Clone, Copy, Debug, Default, Eq, Hash, PartialEq)]
+pub(super) struct EssStat {
+    behavior: PlayerBehavior,
+    atk: i32,
+    def: i32,
+}
+
+impl EssStat {
+    pub(super) fn new(stat: PlayerStat) -> Self {
+        Self {
+            behavior: stat.behavior,
+            atk: stat.atk,
+            def: stat.def,
+        }
     }
 }
 

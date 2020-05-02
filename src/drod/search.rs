@@ -5,8 +5,9 @@ use rust_dense_bitset::BitSet as _;
 use rust_dense_bitset::DenseBitSet as BitSet;
 
 use super::bitset_iter::BitSetIter;
+use super::player::Player;
 use super::room::RoomType;
-use super::stat::{PlayerStat, ProbeStat, StatDiff};
+use super::stat::{EssStat, PlayerStat, ProbeStat, StatDiff};
 use super::EssPlayer;
 use super::Level;
 
@@ -23,9 +24,9 @@ pub struct Search {
     init_stat: PlayerStat,
     print_highscore: bool,
     prefix_player: EssPlayer,
-    // optimal_exit_player: Player,
+    optimal_exit_player: Player,
     optimal_exit_player_score: i32,
-    // local_optimal_exit_player: LinkedList<Player>,
+    local_optimal_exit_player: Vec<Player>,
     optimal_player: HashMap<BitSet, EssPlayer>,
     init_player: EssPlayer,
     total_search_count: usize,
@@ -34,7 +35,7 @@ pub struct Search {
     prefix_bitset: BitSet,
     suffix: Vec<usize>,
     suffix_bitset: BitSet,
-    // probe_result: HashMap<EssStat, Vec<ProbeStat>>,
+    probe_result: HashMap<EssStat, Vec<ProbeStat>>,
     clones: VecDeque<BitSet>,
     optimal_needed_count: HashMap<BitSet, i32>,
 }
@@ -51,9 +52,9 @@ impl Search {
             init_stat,
             print_highscore: true,
             prefix_player: init_player,
-            // optimal_exit_player: Player::new(),
+            optimal_exit_player: Player::new(),
             optimal_exit_player_score: 0,
-            // local_optimal_exit_player: LinkedList::new(),
+            local_optimal_exit_player: Vec::new(),
             optimal_player,
             init_player,
             total_search_count: 0,
@@ -62,7 +63,7 @@ impl Search {
             prefix_bitset: BitSet::new(),
             suffix: Vec::new(),
             suffix_bitset: BitSet::new(),
-            // probe_result: HashMap::new(),
+            probe_result: HashMap::new(),
             clones: VecDeque::new(),
             optimal_needed_count: HashMap::new(),
         }
@@ -131,7 +132,7 @@ impl Search {
                 for extended_probe in extended_probe_result {
                     if extended_probe.priority {
                         self.expand(
-                            &current_player,
+                            current_player,
                             extended_probe.id,
                             &extended_probe.probe,
                             true,
@@ -143,7 +144,7 @@ impl Search {
                 for extended_probe in extended_probe_result {
                     if extended_probe.free {
                         self.expand(
-                            &current_player,
+                            current_player,
                             extended_probe.id,
                             &extended_probe.probe,
                             true,
@@ -154,7 +155,7 @@ impl Search {
             } else {
                 for extended_probe in extended_probe_result {
                     self.expand(
-                        &current_player,
+                        current_player,
                         extended_probe.id,
                         &extended_probe.probe,
                         true,
@@ -162,25 +163,113 @@ impl Search {
                 }
             }
             if self.optimal_needed_count[&current] == 0 {
-                self.try_remove_optimal_player(&current);
+                self.try_remove_optimal_player(current);
             }
         }
     }
 
-    // fn probe_stat(&mut self, stat: &EssStat) -> Vec<ProbeStat> {
-    //     todo!()
-    // }
+    fn to_player(&self, player: &EssPlayer) -> Player {
+        todo!()
+    }
 
-    // TODO make this return slice?
+    // TODO make these return slice?
+    fn probe_stat(&mut self, stat: &EssStat) -> Vec<ProbeStat> {
+        if let Some(result) = self.probe_result.get(stat) {
+            result.clone()
+        } else {
+            let result: Vec<ProbeStat> = (0..self.level.next_id)
+                .map(|i| self.level.vertex(i).to_probe_stat(stat))
+                .collect();
+            self.probe_result.insert(*stat, result.clone());
+            result
+        }
+    }
+
     fn probe_player(&mut self, player: &EssPlayer) -> Vec<ProbeStat> {
-        todo!()
+        self.probe_stat(&EssStat::new(player.stat))
     }
 
-    fn try_remove_optimal_player(&mut self, bitset: &BitSet) {
-        todo!()
+    fn try_remove_optimal_player(&mut self, bitset: BitSet) {
+        let mut bitset = bitset;
+        while bitset != self.prefix_player.visited {
+            let last_visit = self.optimal_player[&bitset].last_visit;
+            let count = *self
+                .optimal_needed_count
+                .entry(bitset)
+                .and_modify(|x| *x -= 1)
+                .or_insert(-1);
+            if count <= 0 {
+                self.optimal_player.remove(&bitset);
+                self.optimal_needed_count.remove(&bitset);
+                if last_visit == usize::MAX {
+                    return;
+                } else {
+                    bitset.set_bit(last_visit, false);
+                }
+            }
+        }
     }
 
-    fn expand(&mut self, player: &EssPlayer, id: usize, probe: &ProbeStat, push: bool) {
-        todo!()
+    fn expand(&mut self, mut player: EssPlayer, id: usize, probe: &ProbeStat, push: bool) {
+        let bitset = player.visited;
+        if id == self.level.exit {
+            player.visit(id, &self.level, probe);
+
+            let stat = player.stat;
+            let mut local_max = true;
+            self.local_optimal_exit_player.retain(|local_player| {
+                if local_player.stat.ge(&stat) {
+                    local_max = false;
+                    true
+                } else if stat.ge(&local_player.stat) && local_max {
+                    false
+                } else {
+                    true
+                }
+            });
+
+            if !local_max {
+                return;
+            }
+
+            let optimal_player = self.to_player(&player);
+            self.local_optimal_exit_player.push(optimal_player.clone());
+
+            let new_score = player.stat.score();
+            if new_score <= self.optimal_exit_player_score {
+                return;
+            }
+
+            self.try_remove_optimal_player(self.optimal_exit_player.previous_visited);
+            self.optimal_exit_player = optimal_player;
+            self.optimal_exit_player_score = new_score;
+            *self.optimal_needed_count.entry(bitset).or_insert(0) += 1;
+            if self.print_highscore {
+                todo!()
+            }
+        } else {
+            let mut new_bitset = bitset;
+            new_bitset.set_bit(id, true);
+            if let Some(optimal_player) = self.optimal_player.get_mut(&new_bitset) {
+                let new_hp = player.stat.hp + probe.diff.hp;
+                if new_hp <= optimal_player.stat.hp {
+                    return;
+                }
+                let previous_visited = optimal_player.previous_visited();
+                optimal_player.stat.hp = new_hp;
+                optimal_player.last_visit = id;
+                self.try_remove_optimal_player(previous_visited);
+                *self.optimal_needed_count.entry(bitset).or_insert(0) += 1;
+            } else {
+                player.visit(id, &self.level, probe);
+                self.optimal_player.insert(new_bitset, player);
+                *self.optimal_needed_count.entry(bitset).or_insert(0) += 1;
+
+                if push {
+                    self.clones.push_back(new_bitset);
+                    self.total_search_count += 1;
+                }
+            }
+        }
     }
 }

@@ -33,11 +33,18 @@ impl EssPlayer {
     }
 
     pub(super) fn previous_visited(&self) -> BitSet {
-        todo!()
+        let mut bitset = self.visited;
+        bitset.set_bit(self.last_visit, false);
+        bitset
     }
 
     pub(super) fn visit(&mut self, id: usize, level: &Level, probe: &ProbeStat) {
-        todo!()
+        self.stat += probe.diff;
+        self.neighbors |= level.neighbors[id];
+        self.neighbors &= !level.excluded_neighbors[id];
+        self.neighbors &= !self.visited;
+        self.last_visit = id;
+        self.visited.set_bit(id, true);
     }
 
     pub(super) fn enter(&mut self, level: &Level) {

@@ -11,7 +11,8 @@ pub struct Level {
 
     // TODO add graph fields
     pub(super) next_id: usize,
-    pub(super) neighbours: Vec<BitSet>,
+    pub(super) neighbors: Vec<BitSet>,
+    pub(super) excluded_neighbors: Vec<BitSet>,
 }
 
 impl Level {
@@ -21,7 +22,8 @@ impl Level {
             exit: usize::MAX,
 
             next_id: 0,
-            neighbours: Vec::new(),
+            neighbors: Vec::new(),
+            excluded_neighbors: Vec::new(),
         }
     }
 

@@ -97,7 +97,7 @@ impl Search {
             let mut has_free = false;
             for neighbor in BitSetIter::from(current_player.neighbors) {
                 if was_intermediate
-                    && !self.level.neighbours[current_player.last_visit].get_bit(neighbor)
+                    && !self.level.neighbors[current_player.last_visit].get_bit(neighbor)
                 {
                     continue;
                 }
@@ -186,7 +186,7 @@ impl Search {
     }
 
     fn probe_player(&mut self, player: &EssPlayer) -> Vec<ProbeStat> {
-        self.probe_stat(&EssStat::new(player.stat))
+        self.probe_stat(&player.stat.into())
     }
 
     fn try_remove_optimal_player(&mut self, bitset: BitSet) {

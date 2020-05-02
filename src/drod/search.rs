@@ -168,8 +168,22 @@ impl Search {
         }
     }
 
-    fn to_player(&self, player: &EssPlayer) -> Player {
-        todo!()
+    fn to_player(&self, mut player: EssPlayer) -> Player {
+        let mut new_player = Player::with_stat(self.init_player.stat);
+        new_player.enter(&self.level);
+        for id in &self.prefix {
+            new_player.visit(*id, &self.level);
+        }
+        let mut trace = Vec::new();
+        while player.visited != self.prefix_player.visited {
+            trace.push(player.last_visit);
+            let bitset = player.previous_visited();
+            player = self.optimal_player[&bitset];
+        }
+        for id in trace.into_iter().rev() {
+            new_player.visit(id, &self.level);
+        }
+        new_player
     }
 
     // TODO make these return slice?
@@ -232,7 +246,7 @@ impl Search {
                 return;
             }
 
-            let optimal_player = self.to_player(&player);
+            let optimal_player = self.to_player(player);
             self.local_optimal_exit_player.push(optimal_player.clone());
 
             let new_score = player.stat.score();

@@ -1,3 +1,4 @@
+mod bitset_iter;
 mod essplayer;
 mod level;
 mod search;

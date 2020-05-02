@@ -40,6 +40,7 @@ impl RoomElement {
     }
 }
 
+#[derive(Debug)]
 pub(super) struct Room {
     name: String,
     content: Vec<RoomElement>,

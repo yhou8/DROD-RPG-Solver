@@ -13,6 +13,7 @@ pub struct Level {
     pub(super) next_id: usize,
     pub(super) neighbors: Vec<BitSet>,
     pub(super) excluded_neighbors: Vec<BitSet>,
+    vertices: Vec<Room>,
 }
 
 impl Level {
@@ -24,14 +25,11 @@ impl Level {
             next_id: 0,
             neighbors: Vec::new(),
             excluded_neighbors: Vec::new(),
+            vertices: Vec::new(),
         }
     }
 
-    // fn current_vertex(&self) -> &Room {
-    //     todo!()
-    // }
-
     pub(super) fn vertex(&self, id: usize) -> &Room {
-        todo!()
+        &self.vertices[id]
     }
 }

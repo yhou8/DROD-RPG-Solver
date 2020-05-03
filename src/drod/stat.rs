@@ -114,7 +114,13 @@ impl PlayerStat {
 
         // Default score formula for DROD RPG
         (self.hp + 1) * 25
-            + (self.atk * 5 + self.def * 3 + self.yk * 10 + self.gk * 20 + self.bk * 30 + self.sk * 30) * 1000
+            + (self.atk * 5
+                + self.def * 3
+                + self.yk * 10
+                + self.gk * 20
+                + self.bk * 30
+                + self.sk * 30)
+                * 1000
     }
 
     fn join(&mut self, other: Self) {

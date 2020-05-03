@@ -1,26 +1,26 @@
 use std::u8;
 
 use rust_dense_bitset::BitSet as _;
-use rust_dense_bitset::DenseBitSet as BitSet;
+use rust_dense_bitset::DenseBitSet as RoomSet;
 
 use super::stat::{PlayerStat, ProbeStat};
 use super::Level;
 
 #[derive(Clone, Copy, Debug)]
-pub struct EssPlayer {
+pub struct RouteState {
     pub(super) stat: PlayerStat,
-    pub(super) neighbors: BitSet,
-    pub(super) visited: BitSet,
+    pub(super) neighbors: RoomSet,
+    pub(super) visited: RoomSet,
     pub(super) last_visit: u8,
 }
 
-impl EssPlayer {
+impl RouteState {
     // TODO replace with with_stat?
     fn new() -> Self {
         Self {
             stat: PlayerStat::default(),
-            neighbors: BitSet::new(),
-            visited: BitSet::new(),
+            neighbors: RoomSet::new(),
+            visited: RoomSet::new(),
             last_visit: u8::MAX,
         }
     }
@@ -28,15 +28,15 @@ impl EssPlayer {
     pub fn with_stat(stat: PlayerStat) -> Self {
         Self {
             stat,
-            ..EssPlayer::new()
+            ..RouteState::new()
         }
     }
 
-    pub(super) fn previous_visited(&self) -> BitSet {
+    pub(super) fn previous_visited(&self) -> RoomSet {
         let idx = self.last_visit as usize;
-        let mut bitset = self.visited;
-        bitset.set_bit(idx, false);
-        bitset
+        let mut rooms = self.visited;
+        rooms.set_bit(idx, false);
+        rooms
     }
 
     pub(super) fn visit(&mut self, room_id: u8, level: &Level, probe: &ProbeStat) {

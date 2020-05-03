@@ -1,6 +1,6 @@
 use std::u8;
 
-use rust_dense_bitset::DenseBitSet as BitSet;
+use rust_dense_bitset::DenseBitSet as RoomSet;
 
 use super::room::Room;
 
@@ -11,8 +11,8 @@ pub struct Level {
 
     // TODO add graph fields
     pub(super) next_id: u8,
-    pub(super) neighbors: Vec<BitSet>,
-    pub(super) excluded_neighbors: Vec<BitSet>,
+    pub(super) neighbors: Vec<RoomSet>,
+    pub(super) excluded_neighbors: Vec<RoomSet>,
     vertices: Vec<Room>,
 }
 

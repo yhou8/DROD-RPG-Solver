@@ -8,7 +8,7 @@ mod room;
 mod search;
 mod stat;
 
-pub use essplayer::EssPlayer;
+pub use essplayer::RouteState;
 pub use level::Level;
 pub use search::Search;
 pub use stat::PlayerStat;

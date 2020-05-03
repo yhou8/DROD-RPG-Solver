@@ -2,13 +2,13 @@ use std::collections::{HashMap, VecDeque};
 use std::u8;
 
 use rust_dense_bitset::BitSet as _;
-use rust_dense_bitset::DenseBitSet as BitSet;
+use rust_dense_bitset::DenseBitSet as RoomSet;
 
 use super::bitset_iter::BitSetIter;
-use super::player::Player;
+use super::player::Route;
 use super::room::RoomType;
 use super::stat::{EssStat, PlayerStat, ProbeStat, StatDiff};
-use super::EssPlayer;
+use super::RouteState;
 use super::Level;
 
 struct ExtendedProbeStat {
@@ -21,83 +21,69 @@ struct ExtendedProbeStat {
 
 pub struct Search {
     level: Level,
-    init_stat: PlayerStat,
-    print_highscore: bool,
-    prefix_player: EssPlayer,
-    optimal_exit_player: Player,
-    optimal_exit_player_score: i32,
-    local_optimal_exit_player: Vec<Player>,
-    optimal_player: HashMap<BitSet, EssPlayer>,
-    init_player: EssPlayer,
+    optimal_route: Route,
+    optimal_route_score: i32,
+    local_optimal_routes: Vec<Route>,
+    optimal_visit_states: HashMap<RoomSet, RouteState>,
+    init_state: RouteState,
     total_search_count: usize,
     current_search_count: usize,
-    prefix: Vec<u8>,
-    prefix_bitset: BitSet,
-    suffix: Vec<u8>,
-    suffix_bitset: BitSet,
     probe_result: HashMap<EssStat, Vec<ProbeStat>>,
-    clones: VecDeque<BitSet>,
-    optimal_needed_count: HashMap<BitSet, i32>,
+    remaining_visits: VecDeque<RoomSet>,
+    optimal_visit_rc: HashMap<RoomSet, i32>,
 }
 
 impl Search {
     pub fn new(level: Level, init_stat: PlayerStat) -> Self {
-        let mut init_player = EssPlayer::with_stat(init_stat);
-        init_player.enter(&level);
-        let mut optimal_player = HashMap::new();
-        optimal_player.insert(BitSet::new(), init_player);
+        let mut init_state = RouteState::with_stat(init_stat);
+        init_state.enter(&level);
+        let mut optimal_states = HashMap::new();
+        optimal_states.insert(RoomSet::new(), init_state);
 
         Self {
             level,
-            init_stat,
-            print_highscore: true,
-            prefix_player: init_player,
-            optimal_exit_player: Player::new(),
-            optimal_exit_player_score: 0,
-            local_optimal_exit_player: Vec::new(),
-            optimal_player,
-            init_player,
+            optimal_route: Route::new(),
+            optimal_route_score: 0,
+            local_optimal_routes: Vec::new(),
+            optimal_visit_states: optimal_states,
+            init_state,
             total_search_count: 0,
             current_search_count: 0,
-            prefix: Vec::new(),
-            prefix_bitset: BitSet::new(),
-            suffix: Vec::new(),
-            suffix_bitset: BitSet::new(),
             probe_result: HashMap::new(),
-            clones: VecDeque::new(),
-            optimal_needed_count: HashMap::new(),
+            remaining_visits: VecDeque::new(),
+            optimal_visit_rc: HashMap::new(),
         }
     }
 
     pub fn search(&mut self) {
-        self.optimal_player
-            .insert(self.prefix_player.visited, self.prefix_player);
-        self.clones.push_back(self.prefix_player.visited);
+        self.optimal_visit_states
+            .insert(self.init_state.visited, self.init_state);
+        self.remaining_visits.push_back(self.init_state.visited);
         self.total_search_count += 1;
 
-        while let Some(current) = self.clones.pop_front() {
-            let current_player = self.optimal_player[&current];
-            self.optimal_needed_count.insert(current, 0);
+        while let Some(rooms) = self.remaining_visits.pop_front() {
+            let state = self.optimal_visit_states[&rooms];
+            self.optimal_visit_rc.insert(rooms, 0);
             self.current_search_count += 1;
 
-            let probe_result = self.probe_player(&current_player).clone();
+            let probe_result = self.probe_state(&state).clone();
             let mut extended_probe_result = Vec::<ExtendedProbeStat>::with_capacity(
-                current_player.neighbors.get_weight() as usize,
+                state.neighbors.get_weight() as usize,
             );
-            let was_intermediate = if current_player.last_visit == u8::MAX {
+            let was_intermediate = if state.last_visit == u8::MAX {
                 false
             } else {
                 self.level
-                    .vertex(current_player.last_visit)
+                    .vertex(state.last_visit)
                     .room_type
                     .contains(RoomType::INTERMEDIATE)
             };
 
             let mut has_priority = false;
             let mut has_free = false;
-            for neighbor in BitSetIter::from(current_player.neighbors) {
+            for neighbor in BitSetIter::from(state.neighbors) {
                 let idx_neighbor = neighbor as usize;
-                let idx_visit = current_player.last_visit as usize;
+                let idx_visit = state.last_visit as usize;
                 if was_intermediate
                     && !self.level.neighbors[idx_visit].get_bit(idx_neighbor)
                 {
@@ -105,10 +91,11 @@ impl Search {
                 }
 
                 let probe_stat = probe_result[idx_neighbor];
-                let available = current_player.stat.ge(&probe_stat.req);
+                let available = state.stat.ge(&probe_stat.req);
                 if !available {
                     continue;
                 }
+
                 let room_type = self.level.vertex(neighbor).room_type;
                 let priority = room_type.contains(RoomType::PRIORITY_ROOM);
                 let intermediate = room_type.contains(RoomType::INTERMEDIATE);
@@ -134,10 +121,9 @@ impl Search {
                 for extended_probe in extended_probe_result {
                     if extended_probe.priority {
                         self.expand(
-                            current_player,
+                            state,
                             extended_probe.room_id,
                             &extended_probe.probe,
-                            true,
                         );
                         break;
                     }
@@ -146,10 +132,9 @@ impl Search {
                 for extended_probe in extended_probe_result {
                     if extended_probe.free {
                         self.expand(
-                            current_player,
+                            state,
                             extended_probe.room_id,
                             &extended_probe.probe,
-                            true,
                         );
                         break;
                     }
@@ -157,35 +142,32 @@ impl Search {
             } else {
                 for extended_probe in extended_probe_result {
                     self.expand(
-                        current_player,
+                        state,
                         extended_probe.room_id,
                         &extended_probe.probe,
-                        true,
                     );
                 }
             }
-            if self.optimal_needed_count[&current] == 0 {
-                self.try_remove_optimal_player(current);
+            if self.optimal_visit_rc[&rooms] == 0 {
+                self.try_remove_optimal_state(rooms);
             }
         }
     }
 
-    fn to_player(&self, mut player: EssPlayer) -> Player {
-        let mut new_player = Player::with_stat(self.init_player.stat);
-        new_player.enter(&self.level);
-        for id in &self.prefix {
-            new_player.visit(*id, &self.level);
-        }
+    fn to_route(&self, state: RouteState) -> Route {
+        let mut route = Route::with_stat(self.init_state.stat);
+        route.enter(&self.level);
         let mut trace = Vec::new();
-        while player.visited != self.prefix_player.visited {
-            trace.push(player.last_visit);
-            let bitset = player.previous_visited();
-            player = self.optimal_player[&bitset];
+        let mut state = state;
+        while state.visited != self.init_state.visited {
+            trace.push(state.last_visit);
+            let rooms = state.previous_visited();
+            state = self.optimal_visit_states[&rooms];
         }
-        for id in trace.into_iter().rev() {
-            new_player.visit(id, &self.level);
+        for room_id in trace.into_iter().rev() {
+            route.visit(room_id, &self.level);
         }
-        new_player
+        route
     }
 
     // TODO make these return slice?
@@ -201,44 +183,45 @@ impl Search {
         }
     }
 
-    fn probe_player(&mut self, player: &EssPlayer) -> Vec<ProbeStat> {
-        self.probe_stat(&player.stat.into())
+    fn probe_state(&mut self, state: &RouteState) -> Vec<ProbeStat> {
+        self.probe_stat(&state.stat.into())
     }
 
-    fn try_remove_optimal_player(&mut self, bitset: BitSet) {
-        let mut bitset = bitset;
-        while bitset != self.prefix_player.visited {
-            let last_visit = self.optimal_player[&bitset].last_visit;
-            let count = *self
-                .optimal_needed_count
-                .entry(bitset)
+    fn try_remove_optimal_state(&mut self, rooms: RoomSet) {
+        let mut rooms = rooms;
+        while rooms != self.init_state.visited {
+            let last_visit = self.optimal_visit_states[&rooms].last_visit;
+            let rc = *self
+                .optimal_visit_rc
+                .entry(rooms)
                 .and_modify(|x| *x -= 1)
                 .or_insert(-1);
-            if count <= 0 {
-                self.optimal_player.remove(&bitset);
-                self.optimal_needed_count.remove(&bitset);
+            if rc <= 0 {
+                self.optimal_visit_states.remove(&rooms);
+                self.optimal_visit_rc.remove(&rooms);
                 if last_visit == u8::MAX {
                     return;
                 } else {
                     let idx = last_visit as usize;
-                    bitset.set_bit(idx, false);
+                    rooms.set_bit(idx, false);
                 }
             }
         }
     }
 
-    fn expand(&mut self, mut player: EssPlayer, room_id: u8, probe: &ProbeStat, push: bool) {
-        let bitset = player.visited;
+    fn expand(&mut self, state: RouteState, room_id: u8, probe: &ProbeStat) {
+        let rooms = state.visited;
+        let mut state = state;
         if room_id == self.level.exit {
-            player.visit(room_id, &self.level, probe);
+            state.visit(room_id, &self.level, probe);
 
-            let stat = player.stat;
+            let stat = state.stat;
             let mut local_max = true;
-            self.local_optimal_exit_player.retain(|local_player| {
-                if local_player.stat.ge(&stat) {
+            self.local_optimal_routes.retain(|local_route| {
+                if local_route.stat.ge(&stat) {
                     local_max = false;
                     true
-                } else if stat.ge(&local_player.stat) && local_max {
+                } else if stat.ge(&local_route.stat) && local_max {
                     false
                 } else {
                     true
@@ -249,44 +232,41 @@ impl Search {
                 return;
             }
 
-            let optimal_player = self.to_player(player);
-            self.local_optimal_exit_player.push(optimal_player.clone());
+            let route = self.to_route(state);
+            self.local_optimal_routes.push(route.clone());
 
-            let new_score = player.stat.score();
-            if new_score <= self.optimal_exit_player_score {
+            let score = state.stat.score();
+            if score <= self.optimal_route_score {
                 return;
             }
 
-            self.try_remove_optimal_player(self.optimal_exit_player.previous_visited);
-            self.optimal_exit_player = optimal_player;
-            self.optimal_exit_player_score = new_score;
-            *self.optimal_needed_count.entry(bitset).or_insert(0) += 1;
-            if self.print_highscore {
-                todo!()
-            }
+            self.try_remove_optimal_state(self.optimal_route.previous_visited);
+            self.optimal_route = route;
+            self.optimal_route_score = score;
+            *self.optimal_visit_rc.entry(rooms).or_insert(0) += 1;
+
+            // Print high score
+            todo!()
         } else {
             let idx = room_id as usize;
-            let mut new_bitset = bitset;
-            new_bitset.set_bit(idx, true);
-            if let Some(optimal_player) = self.optimal_player.get_mut(&new_bitset) {
-                let new_hp = player.stat.hp + probe.diff.hp;
-                if new_hp <= optimal_player.stat.hp {
+            let mut new_rooms = rooms;
+            new_rooms.set_bit(idx, true);
+            if let Some(optimal_state) = self.optimal_visit_states.get_mut(&new_rooms) {
+                let new_hp = state.stat.hp + probe.diff.hp;
+                if new_hp <= optimal_state.stat.hp {
                     return;
                 }
-                let previous_visited = optimal_player.previous_visited();
-                optimal_player.stat.hp = new_hp;
-                optimal_player.last_visit = room_id;
-                self.try_remove_optimal_player(previous_visited);
-                *self.optimal_needed_count.entry(bitset).or_insert(0) += 1;
+                let previous_visited = optimal_state.previous_visited();
+                optimal_state.stat.hp = new_hp;
+                optimal_state.last_visit = room_id;
+                self.try_remove_optimal_state(previous_visited);
+                *self.optimal_visit_rc.entry(rooms).or_insert(0) += 1;
             } else {
-                player.visit(room_id, &self.level, probe);
-                self.optimal_player.insert(new_bitset, player);
-                *self.optimal_needed_count.entry(bitset).or_insert(0) += 1;
-
-                if push {
-                    self.clones.push_back(new_bitset);
-                    self.total_search_count += 1;
-                }
+                state.visit(room_id, &self.level, probe);
+                self.optimal_visit_states.insert(new_rooms, state);
+                *self.optimal_visit_rc.entry(rooms).or_insert(0) += 1;
+                self.remaining_visits.push_back(new_rooms);
+                self.total_search_count += 1;
             }
         }
     }

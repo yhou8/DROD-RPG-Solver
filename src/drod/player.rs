@@ -1,34 +1,34 @@
 use rust_dense_bitset::BitSet as _;
-use rust_dense_bitset::DenseBitSet as BitSet;
+use rust_dense_bitset::DenseBitSet as RoomSet;
 
 use super::{Level, PlayerStat};
 
 #[derive(Clone, Debug)]
-pub(super) struct Player {
+pub(super) struct Route {
     pub(super) stat: PlayerStat,
     // level: Level,
     trace: Vec<u8>,
-    neighbors: BitSet,
-    visited: BitSet,
-    pub(super) previous_visited: BitSet,
+    neighbors: RoomSet,
+    visited: RoomSet,
+    pub(super) previous_visited: RoomSet,
 }
 
-impl Player {
+impl Route {
     pub(super) fn new() -> Self {
         Self {
             stat: PlayerStat::default(),
             // level: Level::new(),
             trace: Vec::new(),
-            neighbors: BitSet::new(),
-            visited: BitSet::new(),
-            previous_visited: BitSet::new(),
+            neighbors: RoomSet::new(),
+            visited: RoomSet::new(),
+            previous_visited: RoomSet::new(),
         }
     }
 
     pub(super) fn with_stat(stat: PlayerStat) -> Self {
         Self {
             stat,
-            ..Player::new()
+            ..Route::new()
         }
     }
 

@@ -12,15 +12,16 @@ impl From<BitSet> for BitSetIter {
 }
 
 impl Iterator for BitSetIter {
-    type Item = usize;
+    type Item = u8;
 
     fn next(&mut self) -> Option<Self::Item> {
         if self.0.none() {
             None
         } else {
-            let first_set = self.0.first_set() as usize;
-            self.0.set_bit(first_set, false);
-            Some(first_set)
+            let first_set = self.0.first_set();
+            assert!(first_set < 64);
+            self.0.set_bit(first_set as usize, false);
+            Some(first_set as u8)
         }
     }
 }

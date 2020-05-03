@@ -7,7 +7,7 @@ use super::{Level, PlayerStat};
 pub(super) struct Player {
     pub(super) stat: PlayerStat,
     // level: Level,
-    trace: Vec<usize>,
+    trace: Vec<u8>,
     neighbors: BitSet,
     visited: BitSet,
     pub(super) previous_visited: BitSet,
@@ -33,19 +33,21 @@ impl Player {
     }
 
     pub(super) fn enter(&mut self, level: &Level) {
-        self.neighbors.set_bit(level.entrance, true)
+        let idx = level.entrance as usize;
+        self.neighbors.set_bit(idx, true)
     }
 
-    pub(super) fn visit(&mut self, id: usize, level: &Level) {
-        assert!(self.neighbors.get_bit(id));
-        let probe = level.vertex(id).to_probe_stat(&self.stat.into());
+    pub(super) fn visit(&mut self, room_id: u8, level: &Level) {
+        let idx = room_id as usize;
+        assert!(self.neighbors.get_bit(idx));
+        let probe = level.vertex(room_id).to_probe_stat(&self.stat.into());
         assert!(self.stat.ge(&probe.req));
         self.stat += probe.diff;
-        self.trace.push(id);
-        self.neighbors |= level.neighbors[id];
-        self.neighbors &= !level.excluded_neighbors[id];
+        self.trace.push(room_id);
+        self.neighbors |= level.neighbors[idx];
+        self.neighbors &= !level.excluded_neighbors[idx];
         self.neighbors &= !self.visited;
         self.previous_visited = self.visited;
-        self.visited.set_bit(id, true);
+        self.visited.set_bit(idx, true);
     }
 }

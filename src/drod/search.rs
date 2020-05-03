@@ -1,5 +1,5 @@
 use std::collections::{HashMap, VecDeque};
-use std::usize;
+use std::u8;
 
 use rust_dense_bitset::BitSet as _;
 use rust_dense_bitset::DenseBitSet as BitSet;
@@ -12,7 +12,7 @@ use super::EssPlayer;
 use super::Level;
 
 struct ExtendedProbeStat {
-    id: usize,
+    room_id: u8,
     probe: ProbeStat,
     loss: bool,
     free: bool,
@@ -31,9 +31,9 @@ pub struct Search {
     init_player: EssPlayer,
     total_search_count: usize,
     current_search_count: usize,
-    prefix: Vec<usize>,
+    prefix: Vec<u8>,
     prefix_bitset: BitSet,
-    suffix: Vec<usize>,
+    suffix: Vec<u8>,
     suffix_bitset: BitSet,
     probe_result: HashMap<EssStat, Vec<ProbeStat>>,
     clones: VecDeque<BitSet>,
@@ -84,7 +84,7 @@ impl Search {
             let mut extended_probe_result = Vec::<ExtendedProbeStat>::with_capacity(
                 current_player.neighbors.get_weight() as usize,
             );
-            let was_intermediate = if current_player.last_visit == usize::MAX {
+            let was_intermediate = if current_player.last_visit == u8::MAX {
                 false
             } else {
                 self.level
@@ -96,13 +96,15 @@ impl Search {
             let mut has_priority = false;
             let mut has_free = false;
             for neighbor in BitSetIter::from(current_player.neighbors) {
+                let idx_neighbor = neighbor as usize;
+                let idx_visit = current_player.last_visit as usize;
                 if was_intermediate
-                    && !self.level.neighbors[current_player.last_visit].get_bit(neighbor)
+                    && !self.level.neighbors[idx_visit].get_bit(idx_neighbor)
                 {
                     continue;
                 }
 
-                let probe_stat = probe_result[neighbor];
+                let probe_stat = probe_result[idx_neighbor];
                 let available = current_player.stat.ge(&probe_stat.req);
                 if !available {
                     continue;
@@ -120,7 +122,7 @@ impl Search {
                 has_free |= free;
                 has_priority |= priority;
                 extended_probe_result.push(ExtendedProbeStat {
-                    id: neighbor,
+                    room_id: neighbor,
                     probe: probe_stat,
                     loss: probe_stat.loss > 0,
                     free,
@@ -133,7 +135,7 @@ impl Search {
                     if extended_probe.priority {
                         self.expand(
                             current_player,
-                            extended_probe.id,
+                            extended_probe.room_id,
                             &extended_probe.probe,
                             true,
                         );
@@ -145,7 +147,7 @@ impl Search {
                     if extended_probe.free {
                         self.expand(
                             current_player,
-                            extended_probe.id,
+                            extended_probe.room_id,
                             &extended_probe.probe,
                             true,
                         );
@@ -156,7 +158,7 @@ impl Search {
                 for extended_probe in extended_probe_result {
                     self.expand(
                         current_player,
-                        extended_probe.id,
+                        extended_probe.room_id,
                         &extended_probe.probe,
                         true,
                     );
@@ -215,19 +217,20 @@ impl Search {
             if count <= 0 {
                 self.optimal_player.remove(&bitset);
                 self.optimal_needed_count.remove(&bitset);
-                if last_visit == usize::MAX {
+                if last_visit == u8::MAX {
                     return;
                 } else {
-                    bitset.set_bit(last_visit, false);
+                    let idx = last_visit as usize;
+                    bitset.set_bit(idx, false);
                 }
             }
         }
     }
 
-    fn expand(&mut self, mut player: EssPlayer, id: usize, probe: &ProbeStat, push: bool) {
+    fn expand(&mut self, mut player: EssPlayer, room_id: u8, probe: &ProbeStat, push: bool) {
         let bitset = player.visited;
-        if id == self.level.exit {
-            player.visit(id, &self.level, probe);
+        if room_id == self.level.exit {
+            player.visit(room_id, &self.level, probe);
 
             let stat = player.stat;
             let mut local_max = true;
@@ -262,8 +265,9 @@ impl Search {
                 todo!()
             }
         } else {
+            let idx = room_id as usize;
             let mut new_bitset = bitset;
-            new_bitset.set_bit(id, true);
+            new_bitset.set_bit(idx, true);
             if let Some(optimal_player) = self.optimal_player.get_mut(&new_bitset) {
                 let new_hp = player.stat.hp + probe.diff.hp;
                 if new_hp <= optimal_player.stat.hp {
@@ -271,11 +275,11 @@ impl Search {
                 }
                 let previous_visited = optimal_player.previous_visited();
                 optimal_player.stat.hp = new_hp;
-                optimal_player.last_visit = id;
+                optimal_player.last_visit = room_id;
                 self.try_remove_optimal_player(previous_visited);
                 *self.optimal_needed_count.entry(bitset).or_insert(0) += 1;
             } else {
-                player.visit(id, &self.level, probe);
+                player.visit(room_id, &self.level, probe);
                 self.optimal_player.insert(new_bitset, player);
                 *self.optimal_needed_count.entry(bitset).or_insert(0) += 1;
 

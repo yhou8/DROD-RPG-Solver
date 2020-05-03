@@ -1,4 +1,4 @@
-use std::usize;
+use std::u8;
 
 use rust_dense_bitset::BitSet as _;
 use rust_dense_bitset::DenseBitSet as BitSet;
@@ -11,7 +11,7 @@ pub struct EssPlayer {
     pub(super) stat: PlayerStat,
     pub(super) neighbors: BitSet,
     pub(super) visited: BitSet,
-    pub(super) last_visit: usize,
+    pub(super) last_visit: u8,
 }
 
 impl EssPlayer {
@@ -21,7 +21,7 @@ impl EssPlayer {
             stat: PlayerStat::default(),
             neighbors: BitSet::new(),
             visited: BitSet::new(),
-            last_visit: usize::MAX,
+            last_visit: u8::MAX,
         }
     }
 
@@ -33,21 +33,24 @@ impl EssPlayer {
     }
 
     pub(super) fn previous_visited(&self) -> BitSet {
+        let idx = self.last_visit as usize;
         let mut bitset = self.visited;
-        bitset.set_bit(self.last_visit, false);
+        bitset.set_bit(idx, false);
         bitset
     }
 
-    pub(super) fn visit(&mut self, id: usize, level: &Level, probe: &ProbeStat) {
+    pub(super) fn visit(&mut self, room_id: u8, level: &Level, probe: &ProbeStat) {
+        let idx = room_id as usize;
         self.stat += probe.diff;
-        self.neighbors |= level.neighbors[id];
-        self.neighbors &= !level.excluded_neighbors[id];
+        self.neighbors |= level.neighbors[idx];
+        self.neighbors &= !level.excluded_neighbors[idx];
         self.neighbors &= !self.visited;
-        self.last_visit = id;
-        self.visited.set_bit(id, true);
+        self.last_visit = room_id;
+        self.visited.set_bit(idx, true);
     }
 
     pub(super) fn enter(&mut self, level: &Level) {
-        self.neighbors.set_bit(level.entrance, true);
+        let idx = level.entrance as usize;
+        self.neighbors.set_bit(idx, true);
     }
 }

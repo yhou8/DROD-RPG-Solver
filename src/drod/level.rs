@@ -1,4 +1,4 @@
-use std::usize;
+use std::u8;
 
 use rust_dense_bitset::DenseBitSet as BitSet;
 
@@ -6,11 +6,11 @@ use super::room::Room;
 
 #[derive(Debug)]
 pub struct Level {
-    pub(super) entrance: usize,
-    pub(super) exit: usize,
+    pub(super) entrance: u8,
+    pub(super) exit: u8,
 
     // TODO add graph fields
-    pub(super) next_id: usize,
+    pub(super) next_id: u8,
     pub(super) neighbors: Vec<BitSet>,
     pub(super) excluded_neighbors: Vec<BitSet>,
     vertices: Vec<Room>,
@@ -19,8 +19,8 @@ pub struct Level {
 impl Level {
     pub fn new() -> Self {
         Self {
-            entrance: usize::MAX,
-            exit: usize::MAX,
+            entrance: u8::MAX,
+            exit: u8::MAX,
 
             next_id: 0,
             neighbors: Vec::new(),
@@ -29,7 +29,8 @@ impl Level {
         }
     }
 
-    pub(super) fn vertex(&self, id: usize) -> &Room {
-        &self.vertices[id]
+    pub(super) fn vertex(&self, room_id: u8) -> &Room {
+        let idx = room_id as usize;
+        &self.vertices[idx]
     }
 }

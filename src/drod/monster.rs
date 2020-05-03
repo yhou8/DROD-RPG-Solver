@@ -22,6 +22,7 @@ pub(super) struct MonsterStat {
     atk: i32,
     def: i32,
     gr: i32,
+    rep: i32,
 }
 
 impl MonsterStat {
@@ -95,9 +96,18 @@ impl MonsterStat {
             self.gr
         };
 
+        let rep_gain = if self.behavior.contains(MonsterBehavior::ONE_HIT) {
+            0
+        } else if player.behavior.contains(PlayerBehavior::DOUBLE_REP) {
+            self.rep * 2
+        } else {
+            self.rep
+        };
+
         let mut diff = StatDiff::default();
         diff.hp = -hp_cost;
         diff.gr = gr_gain;
+        diff.rep = rep_gain;
 
         let mut req = PlayerStat::default();
         req.hp = hp_cost;

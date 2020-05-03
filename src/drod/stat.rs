@@ -4,8 +4,8 @@ bitflags! {
     #[derive(Default)]
     pub(super) struct PlayerBehavior: u32 {
         const HAS_WEAPON                = 0b00001;
-        const END                       = 0b00010;      // TODO remove?
-        const DOUBLE_GR                 = 0b00100;
+        const DOUBLE_GR                 = 0b00010;
+        const DOUBLE_REP                = 0b00100;
         const DOUBLE_ATK_AGAINST_GOBLIN = 0b01000;
         const DOUBLE_ATK_AGAINST_WYRM   = 0b10000;
     }
@@ -18,6 +18,7 @@ pub(super) struct StatDiff {
     atk: i32,
     def: i32,
     pub(super) gr: i32,
+    pub(super) rep: i32,
     yk: i32,
     gk: i32,
     bk: i32,
@@ -30,6 +31,7 @@ impl StatDiff {
             && self.atk >= other.atk
             && self.def >= other.def
             && self.gr >= other.gr
+            && self.rep >= other.rep
             && self.yk >= other.yk
             && self.gk >= other.gk
             && self.bk >= other.bk
@@ -43,6 +45,7 @@ impl AddAssign for StatDiff {
         self.atk += other.atk;
         self.def += other.def;
         self.gr += other.gr;
+        self.rep += other.rep;
         self.yk += other.yk;
         self.gk += other.gk;
         self.bk += other.bk;
@@ -60,6 +63,7 @@ impl Neg for StatDiff {
             atk: -self.atk,
             def: -self.def,
             gr: -self.gr,
+            rep: -self.rep,
             yk: -self.yk,
             gk: -self.gk,
             bk: -self.bk,
@@ -76,6 +80,7 @@ pub struct PlayerStat {
     atk: i32,
     def: i32,
     gr: i32,
+    rep: i32,
     yk: i32,
     gk: i32,
     bk: i32,
@@ -100,6 +105,7 @@ impl PlayerStat {
         self.atk = self.atk.max(other.atk);
         self.def = self.def.max(other.def);
         self.gr = self.gr.max(other.gr);
+        self.rep = self.rep.max(other.rep);
         self.yk = self.yk.max(other.yk);
         self.gk = self.gk.max(other.gk);
         self.bk = self.bk.max(other.bk);
@@ -111,6 +117,7 @@ impl PlayerStat {
             && self.atk >= other.atk
             && self.def >= other.def
             && self.gr >= other.gr
+            && self.rep >= other.rep
             && self.yk >= other.yk
             && self.gk >= other.gk
             && self.bk >= other.bk
@@ -135,6 +142,7 @@ impl AddAssign<StatDiff> for PlayerStat {
         self.atk += other.atk;
         self.def += other.def;
         self.gr += other.gr;
+        self.rep += other.rep;
         self.yk += other.yk;
         self.gk += other.gk;
         self.bk += other.bk;
@@ -151,6 +159,7 @@ impl Sub<StatDiff> for PlayerStat {
             atk: self.atk - other.atk,
             def: self.def - other.def,
             gr: self.gr - other.gr,
+            rep: self.rep - other.rep,
             yk: self.yk - other.yk,
             gk: self.gk - other.gk,
             bk: self.bk - other.bk,

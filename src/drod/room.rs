@@ -1,5 +1,5 @@
 use super::monster::MonsterStat;
-use super::stat::{EssStat, PlayerStat, ProbeStat, StatDiff};
+use super::stat::{EssStat, PlayerBehavior, PlayerStat, ProbeStat, StatDiff};
 
 bitflags! {
     pub(super) struct RoomType: u32 {
@@ -12,9 +12,10 @@ bitflags! {
 #[derive(Debug)]
 enum RoomElement {
     Resource(StatDiff),
-    Cost(StatDiff, PlayerStat),
+    Cost(StatDiff),
     Requirement(PlayerStat),
     Monster(MonsterStat),
+    Equipment(StatDiff),
 }
 
 impl RoomElement {
@@ -25,9 +26,9 @@ impl RoomElement {
                 req: PlayerStat::default(),
                 loss: 0,
             },
-            RoomElement::Cost(cost, req) => ProbeStat {
+            RoomElement::Cost(cost) => ProbeStat {
                 diff: -*cost,
-                req: *req,
+                req: (*cost).into(),
                 loss: 0,
             },
             RoomElement::Requirement(req) => ProbeStat {
@@ -36,6 +37,30 @@ impl RoomElement {
                 loss: 0,
             },
             RoomElement::Monster(monster) => monster.to_probe_stat(player),
+            RoomElement::Equipment(equip) => {
+                let mut new_behavior = PlayerBehavior::empty();
+                if equip.equip_atk >= player.equip_atk && equip.equip_atk > 0 {
+                    new_behavior = player.behavior & !PlayerBehavior::WEAPON_ATTR | equip.behavior;
+                } else if equip.equip_def >= player.equip_def && equip.equip_def > 0 {
+                    new_behavior = player.behavior
+                } else if equip.equip_atk == 0 && equip.equip_def == 0 {
+                    new_behavior =
+                        player.behavior & !PlayerBehavior::ACCESSORY_ATTR | equip.behavior;
+                }
+
+                let mut diff = StatDiff::default();
+                diff.behavior = new_behavior ^ player.behavior;
+                diff.atk = 0.max(equip.equip_atk - player.equip_atk);
+                diff.def = 0.max(equip.equip_def - player.equip_def);
+                diff.equip_atk = 0.max(equip.equip_atk - player.equip_atk);
+                diff.equip_def = 0.max(equip.equip_def - player.equip_def);
+
+                ProbeStat {
+                    diff,
+                    req: PlayerStat::default(),
+                    loss: 0,
+                }
+            }
         }
     }
 }

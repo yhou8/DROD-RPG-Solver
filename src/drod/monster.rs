@@ -90,7 +90,15 @@ impl MonsterStat {
 
         let gr_gain = if self.behavior.contains(MonsterBehavior::ONE_HIT) {
             0
-        } else if player.behavior.contains(PlayerBehavior::DOUBLE_GR) {
+        } else if player
+            .behavior
+            .contains(PlayerBehavior::DOUBLE_GR_WEAPON | PlayerBehavior::DOUBLE_GR_ACCESSORY)
+        {
+            self.gr * 4
+        } else if player
+            .behavior
+            .intersects(PlayerBehavior::DOUBLE_GR_WEAPON | PlayerBehavior::DOUBLE_GR_ACCESSORY)
+        {
             self.gr * 2
         } else {
             self.gr
@@ -98,7 +106,10 @@ impl MonsterStat {
 
         let rep_gain = if self.behavior.contains(MonsterBehavior::ONE_HIT) {
             0
-        } else if player.behavior.contains(PlayerBehavior::DOUBLE_REP) {
+        } else if player
+            .behavior
+            .contains(PlayerBehavior::DOUBLE_REP_ACCESSORY)
+        {
             self.rep * 2
         } else {
             self.rep

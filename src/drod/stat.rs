@@ -3,20 +3,25 @@ use std::ops::{AddAssign, Neg, Sub};
 bitflags! {
     #[derive(Default)]
     pub(super) struct PlayerBehavior: u32 {
-        const HAS_WEAPON                = 0b00001;
-        const DOUBLE_GR                 = 0b00010;
-        const DOUBLE_REP                = 0b00100;
-        const DOUBLE_ATK_AGAINST_GOBLIN = 0b01000;
-        const DOUBLE_ATK_AGAINST_WYRM   = 0b10000;
+        const HAS_WEAPON                = 0b000001;
+        const DOUBLE_GR_WEAPON          = 0b000010;
+        const DOUBLE_GR_ACCESSORY       = 0b000100;
+        const DOUBLE_REP_ACCESSORY      = 0b001000;
+        const DOUBLE_ATK_AGAINST_GOBLIN = 0b010000;
+        const DOUBLE_ATK_AGAINST_WYRM   = 0b100000;
+        const WEAPON_ATTR = Self::HAS_WEAPON.bits | Self::DOUBLE_GR_WEAPON.bits | Self::DOUBLE_ATK_AGAINST_GOBLIN.bits | Self::DOUBLE_ATK_AGAINST_WYRM.bits;
+        const ACCESSORY_ATTR = Self::DOUBLE_GR_ACCESSORY.bits | Self::DOUBLE_REP_ACCESSORY.bits;
     }
 }
 
 #[derive(Clone, Copy, Debug, Default)]
 pub(super) struct StatDiff {
-    behavior: PlayerBehavior,
+    pub(super) behavior: PlayerBehavior,
     pub(super) hp: i32,
-    atk: i32,
-    def: i32,
+    pub(super) atk: i32,
+    pub(super) def: i32,
+    pub(super) equip_atk: i32,
+    pub(super) equip_def: i32,
     pub(super) gr: i32,
     pub(super) rep: i32,
     yk: i32,
@@ -30,6 +35,8 @@ impl StatDiff {
             && self.hp >= other.hp
             && self.atk >= other.atk
             && self.def >= other.def
+            && self.equip_atk >= other.equip_atk
+            && self.equip_def >= other.equip_def
             && self.gr >= other.gr
             && self.rep >= other.rep
             && self.yk >= other.yk
@@ -40,10 +47,12 @@ impl StatDiff {
 
 impl AddAssign for StatDiff {
     fn add_assign(&mut self, other: Self) {
-        self.behavior |= other.behavior;
+        self.behavior ^= other.behavior;
         self.hp += other.hp;
         self.atk += other.atk;
         self.def += other.def;
+        self.equip_atk += other.equip_atk;
+        self.equip_def += other.equip_def;
         self.gr += other.gr;
         self.rep += other.rep;
         self.yk += other.yk;
@@ -62,6 +71,8 @@ impl Neg for StatDiff {
             hp: -self.hp,
             atk: -self.atk,
             def: -self.def,
+            equip_atk: -self.equip_atk,
+            equip_def: -self.equip_def,
             gr: -self.gr,
             rep: -self.rep,
             yk: -self.yk,
@@ -79,6 +90,8 @@ pub struct PlayerStat {
     pub(super) hp: i32,
     atk: i32,
     def: i32,
+    equip_atk: i32,
+    equip_def: i32,
     gr: i32,
     rep: i32,
     yk: i32,
@@ -104,6 +117,8 @@ impl PlayerStat {
         self.hp = self.hp.max(other.hp);
         self.atk = self.atk.max(other.atk);
         self.def = self.def.max(other.def);
+        self.equip_atk = self.equip_atk.max(other.equip_atk);
+        self.equip_def = self.equip_def.max(other.equip_def);
         self.gr = self.gr.max(other.gr);
         self.rep = self.rep.max(other.rep);
         self.yk = self.yk.max(other.yk);
@@ -116,11 +131,31 @@ impl PlayerStat {
             && self.hp >= other.hp
             && self.atk >= other.atk
             && self.def >= other.def
+            && self.equip_atk >= other.equip_atk
+            && self.equip_def >= other.equip_def
             && self.gr >= other.gr
             && self.rep >= other.rep
             && self.yk >= other.yk
             && self.gk >= other.gk
             && self.bk >= other.bk
+    }
+}
+
+impl From<StatDiff> for PlayerStat {
+    fn from(stat: StatDiff) -> Self {
+        Self {
+            behavior: stat.behavior,
+            hp: stat.hp,
+            atk: stat.atk,
+            def: stat.def,
+            equip_atk: stat.equip_atk,
+            equip_def: stat.equip_def,
+            gr: stat.gr,
+            rep: stat.rep,
+            yk: stat.yk,
+            gk: stat.gk,
+            bk: stat.bk,
+        }
     }
 }
 
@@ -130,6 +165,8 @@ impl From<EssStat> for PlayerStat {
             behavior: stat.behavior,
             atk: stat.atk,
             def: stat.def,
+            equip_atk: stat.equip_atk,
+            equip_def: stat.equip_def,
             ..Self::default()
         }
     }
@@ -137,10 +174,12 @@ impl From<EssStat> for PlayerStat {
 
 impl AddAssign<StatDiff> for PlayerStat {
     fn add_assign(&mut self, other: StatDiff) {
-        self.behavior |= other.behavior;
+        self.behavior &= other.behavior;
         self.hp += other.hp;
         self.atk += other.atk;
         self.def += other.def;
+        self.equip_atk += other.equip_atk;
+        self.equip_def += other.equip_def;
         self.gr += other.gr;
         self.rep += other.rep;
         self.yk += other.yk;
@@ -154,10 +193,12 @@ impl Sub<StatDiff> for PlayerStat {
 
     fn sub(self, other: StatDiff) -> Self {
         Self {
-            behavior: self.behavior - other.behavior,
+            behavior: self.behavior ^ other.behavior,
             hp: self.hp - other.hp,
             atk: self.atk - other.atk,
             def: self.def - other.def,
+            equip_atk: self.equip_atk - other.equip_atk,
+            equip_def: self.equip_def - other.equip_def,
             gr: self.gr - other.gr,
             rep: self.rep - other.rep,
             yk: self.yk - other.yk,
@@ -172,6 +213,8 @@ pub(super) struct EssStat {
     pub(super) behavior: PlayerBehavior,
     pub(super) atk: i32,
     pub(super) def: i32,
+    pub(super) equip_atk: i32,
+    pub(super) equip_def: i32,
 }
 
 impl From<PlayerStat> for EssStat {
@@ -180,6 +223,8 @@ impl From<PlayerStat> for EssStat {
             behavior: stat.behavior,
             atk: stat.atk,
             def: stat.def,
+            equip_atk: stat.equip_atk,
+            equip_def: stat.equip_def,
         }
     }
 }

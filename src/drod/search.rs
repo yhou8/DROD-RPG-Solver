@@ -5,11 +5,11 @@ use rust_dense_bitset::BitSet as _;
 use rust_dense_bitset::DenseBitSet as RoomSet;
 
 use super::bitset_iter::BitSetIter;
-use super::player::Route;
 use super::room::RoomType;
+use super::route::Route;
 use super::stat::{EssStat, PlayerStat, ProbeStat, StatDiff};
-use super::RouteState;
 use super::Level;
+use super::RouteState;
 
 struct ExtendedProbeStat {
     room_id: u8,
@@ -67,9 +67,8 @@ impl Search {
             self.current_search_count += 1;
 
             let probe_result = self.probe_state(&state).clone();
-            let mut extended_probe_result = Vec::<ExtendedProbeStat>::with_capacity(
-                state.neighbors.get_weight() as usize,
-            );
+            let mut extended_probe_result =
+                Vec::<ExtendedProbeStat>::with_capacity(state.neighbors.get_weight() as usize);
             let was_intermediate = if state.last_visit == u8::MAX {
                 false
             } else {
@@ -84,9 +83,7 @@ impl Search {
             for neighbor in BitSetIter::from(state.neighbors) {
                 let idx_neighbor = neighbor as usize;
                 let idx_visit = state.last_visit as usize;
-                if was_intermediate
-                    && !self.level.neighbors[idx_visit].get_bit(idx_neighbor)
-                {
+                if was_intermediate && !self.level.neighbors[idx_visit].get_bit(idx_neighbor) {
                     continue;
                 }
 
@@ -120,32 +117,20 @@ impl Search {
             if has_priority {
                 for extended_probe in extended_probe_result {
                     if extended_probe.priority {
-                        self.expand(
-                            state,
-                            extended_probe.room_id,
-                            &extended_probe.probe,
-                        );
+                        self.expand(state, extended_probe.room_id, &extended_probe.probe);
                         break;
                     }
                 }
             } else if has_free {
                 for extended_probe in extended_probe_result {
                     if extended_probe.free {
-                        self.expand(
-                            state,
-                            extended_probe.room_id,
-                            &extended_probe.probe,
-                        );
+                        self.expand(state, extended_probe.room_id, &extended_probe.probe);
                         break;
                     }
                 }
             } else {
                 for extended_probe in extended_probe_result {
-                    self.expand(
-                        state,
-                        extended_probe.room_id,
-                        &extended_probe.probe,
-                    );
+                    self.expand(state, extended_probe.room_id, &extended_probe.probe);
                 }
             }
             if self.optimal_visit_rc[&rooms] == 0 {

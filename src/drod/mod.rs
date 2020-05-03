@@ -11,4 +11,4 @@ mod stat;
 pub use level::Level;
 pub use route_state::RouteState;
 pub use search::Search;
-pub use stat::PlayerStat;
+pub use stat::Player;

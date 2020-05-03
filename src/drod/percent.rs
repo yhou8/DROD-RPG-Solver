@@ -1,4 +1,4 @@
-use super::stat::{EssStat, PlayerStat, ProbeStat, StatDiff};
+use super::stat::{CombatStat, Player, ProbeStat, StatDiff};
 
 #[derive(Debug)]
 pub(super) struct PercentDamage {
@@ -7,7 +7,7 @@ pub(super) struct PercentDamage {
 }
 
 impl PercentDamage {
-    pub(super) fn to_probe_stat(&self, player: &EssStat) -> ProbeStat {
+    pub(super) fn to_probe_stat(&self, player: &CombatStat) -> ProbeStat {
         todo!()
         // let damage_scaled = (player.hp + 1) * self.percent;
         // let mut hp_cost = damage_scaled / 100;

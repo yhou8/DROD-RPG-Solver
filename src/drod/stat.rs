@@ -31,19 +31,18 @@ pub(super) struct StatDiff {
 }
 
 impl StatDiff {
-    pub(super) fn ge(&self, other: &Self) -> bool {
-        self.behavior.contains(other.behavior)
-            && self.hp >= other.hp
-            && self.atk >= other.atk
-            && self.def >= other.def
-            && self.equip_atk >= other.equip_atk
-            && self.equip_def >= other.equip_def
-            && self.gr >= other.gr
-            && self.rep >= other.rep
-            && self.yk >= other.yk
-            && self.gk >= other.gk
-            && self.bk >= other.bk
-            && self.sk >= other.sk
+    pub(super) fn is_free(&self) -> bool {
+        self.hp >= 0
+            && self.atk >= 0
+            && self.def >= 0
+            && self.equip_atk >= 0
+            && self.equip_def >= 0
+            && self.gr >= 0
+            && self.rep >= 0
+            && self.yk >= 0
+            && self.gk >= 0
+            && self.bk >= 0
+            && self.sk >= 0
     }
 }
 
@@ -89,7 +88,7 @@ impl Neg for StatDiff {
 // HP is shifted by 1 so that 0 is considered alive.
 // This change makes code cleaner.
 #[derive(Clone, Copy, Debug, Default)]
-pub struct PlayerStat {
+pub struct Player {
     behavior: PlayerBehavior,
     pub(super) hp: i32,
     atk: i32,
@@ -104,7 +103,7 @@ pub struct PlayerStat {
     sk: i32,
 }
 
-impl PlayerStat {
+impl Player {
     // Calculates score scaled by 1000
     pub(super) fn score(&self) -> i32 {
         // Default score formula for ToTS floors 25 and 49
@@ -138,7 +137,7 @@ impl PlayerStat {
         self.sk = self.sk.max(other.sk);
     }
 
-    pub(super) fn ge(&self, other: &Self) -> bool {
+    pub(super) fn dominate(&self, other: &Self) -> bool {
         self.behavior.contains(other.behavior)
             && self.hp >= other.hp
             && self.atk >= other.atk
@@ -154,7 +153,7 @@ impl PlayerStat {
     }
 }
 
-impl From<StatDiff> for PlayerStat {
+impl From<StatDiff> for Player {
     fn from(stat: StatDiff) -> Self {
         Self {
             behavior: stat.behavior,
@@ -173,8 +172,8 @@ impl From<StatDiff> for PlayerStat {
     }
 }
 
-impl From<EssStat> for PlayerStat {
-    fn from(stat: EssStat) -> Self {
+impl From<CombatStat> for Player {
+    fn from(stat: CombatStat) -> Self {
         Self {
             behavior: stat.behavior,
             atk: stat.atk,
@@ -186,7 +185,7 @@ impl From<EssStat> for PlayerStat {
     }
 }
 
-impl AddAssign<StatDiff> for PlayerStat {
+impl AddAssign<StatDiff> for Player {
     fn add_assign(&mut self, other: StatDiff) {
         self.behavior &= other.behavior;
         self.hp += other.hp;
@@ -203,7 +202,7 @@ impl AddAssign<StatDiff> for PlayerStat {
     }
 }
 
-impl Sub<StatDiff> for PlayerStat {
+impl Sub<StatDiff> for Player {
     type Output = Self;
 
     fn sub(self, other: StatDiff) -> Self {
@@ -225,7 +224,7 @@ impl Sub<StatDiff> for PlayerStat {
 }
 
 #[derive(Clone, Copy, Debug, Default, Eq, Hash, PartialEq)]
-pub(super) struct EssStat {
+pub(super) struct CombatStat {
     pub(super) behavior: PlayerBehavior,
     pub(super) atk: i32,
     pub(super) def: i32,
@@ -233,8 +232,8 @@ pub(super) struct EssStat {
     pub(super) equip_def: i32,
 }
 
-impl From<PlayerStat> for EssStat {
-    fn from(stat: PlayerStat) -> Self {
+impl From<Player> for CombatStat {
+    fn from(stat: Player) -> Self {
         Self {
             behavior: stat.behavior,
             atk: stat.atk,
@@ -248,7 +247,7 @@ impl From<PlayerStat> for EssStat {
 #[derive(Clone, Copy, Debug, Default)]
 pub(super) struct ProbeStat {
     pub(super) diff: StatDiff,
-    pub(super) req: PlayerStat,
+    pub(super) req: Player,
     pub(super) loss: i32,
 }
 

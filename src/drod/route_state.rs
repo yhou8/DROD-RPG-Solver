@@ -3,12 +3,12 @@ use std::u8;
 use rust_dense_bitset::BitSet as _;
 use rust_dense_bitset::DenseBitSet as RoomSet;
 
-use super::stat::{PlayerStat, ProbeStat};
+use super::stat::{Player, ProbeStat};
 use super::Level;
 
 #[derive(Clone, Copy, Debug)]
 pub struct RouteState {
-    pub(super) stat: PlayerStat,
+    pub(super) player: Player,
     pub(super) neighbors: RoomSet,
     pub(super) visited: RoomSet,
     pub(super) last_visit: u8,
@@ -18,16 +18,16 @@ impl RouteState {
     // TODO replace with with_stat?
     fn new() -> Self {
         Self {
-            stat: PlayerStat::default(),
+            player: Player::default(),
             neighbors: RoomSet::new(),
             visited: RoomSet::new(),
             last_visit: u8::MAX,
         }
     }
 
-    pub fn with_stat(stat: PlayerStat) -> Self {
+    pub fn with_player(player: Player) -> Self {
         Self {
-            stat,
+            player,
             ..RouteState::new()
         }
     }
@@ -41,7 +41,7 @@ impl RouteState {
 
     pub(super) fn visit(&mut self, room_id: u8, level: &Level, probe: &ProbeStat) {
         let idx = room_id as usize;
-        self.stat += probe.diff;
+        self.player += probe.diff;
         self.neighbors |= level.neighbors[idx];
         self.neighbors &= !level.excluded_neighbors[idx];
         self.neighbors &= !self.visited;

@@ -7,7 +7,7 @@ use rust_dense_bitset::DenseBitSet as RoomSet;
 use super::bitset_iter::BitSetIter;
 use super::room::RoomType;
 use super::route::Route;
-use super::stat::{EssStat, PlayerStat, ProbeStat, StatDiff};
+use super::stat::{CombatStat, Player, ProbeStat, StatDiff};
 use super::Level;
 use super::RouteState;
 
@@ -28,14 +28,14 @@ pub struct Search {
     init_state: RouteState,
     total_search_count: usize,
     current_search_count: usize,
-    probe_result: HashMap<EssStat, Vec<ProbeStat>>,
+    probe_result: HashMap<CombatStat, Vec<ProbeStat>>,
     remaining_visits: VecDeque<RoomSet>,
     optimal_visit_rc: HashMap<RoomSet, i32>,
 }
 
 impl Search {
-    pub fn new(level: Level, init_stat: PlayerStat) -> Self {
-        let mut init_state = RouteState::with_stat(init_stat);
+    pub fn new(level: Level, init_player: Player) -> Self {
+        let mut init_state = RouteState::with_player(init_player);
         init_state.enter(&level);
         let mut optimal_states = HashMap::new();
         optimal_states.insert(RoomSet::new(), init_state);
@@ -88,7 +88,7 @@ impl Search {
                 }
 
                 let probe_stat = probe_result[idx_neighbor];
-                let available = state.stat.ge(&probe_stat.req);
+                let available = state.player.dominate(&probe_stat.req);
                 if !available {
                     continue;
                 }
@@ -99,7 +99,7 @@ impl Search {
                 let free = neighbor != self.level.exit
                     && !intermediate
                     && probe_stat.loss == 0
-                    && probe_stat.diff.ge(&StatDiff::default());
+                    && probe_stat.diff.is_free();
                 if !free && room_type.contains(RoomType::ONLY_WHEN_FREE) {
                     continue;
                 }
@@ -140,7 +140,7 @@ impl Search {
     }
 
     fn to_route(&self, state: RouteState) -> Route {
-        let mut route = Route::with_stat(self.init_state.stat);
+        let mut route = Route::with_player(self.init_state.player);
         route.enter(&self.level);
         let mut trace = Vec::new();
         let mut state = state;
@@ -156,7 +156,7 @@ impl Search {
     }
 
     // TODO make these return slice?
-    fn probe_stat(&mut self, stat: &EssStat) -> Vec<ProbeStat> {
+    fn probe_stat(&mut self, stat: &CombatStat) -> Vec<ProbeStat> {
         if let Some(result) = self.probe_result.get(stat) {
             result.clone()
         } else {
@@ -169,7 +169,7 @@ impl Search {
     }
 
     fn probe_state(&mut self, state: &RouteState) -> Vec<ProbeStat> {
-        self.probe_stat(&state.stat.into())
+        self.probe_stat(&state.player.into())
     }
 
     fn try_remove_optimal_state(&mut self, rooms: RoomSet) {
@@ -200,13 +200,13 @@ impl Search {
         if room_id == self.level.exit {
             state.visit(room_id, &self.level, probe);
 
-            let stat = state.stat;
+            let player = state.player;
             let mut local_max = true;
             self.local_optimal_routes.retain(|local_route| {
-                if local_route.stat.ge(&stat) {
+                if local_route.player.dominate(&player) {
                     local_max = false;
                     true
-                } else if stat.ge(&local_route.stat) && local_max {
+                } else if player.dominate(&local_route.player) && local_max {
                     false
                 } else {
                     true
@@ -220,7 +220,7 @@ impl Search {
             let route = self.to_route(state);
             self.local_optimal_routes.push(route.clone());
 
-            let score = state.stat.score();
+            let score = state.player.score();
             if score <= self.optimal_route_score {
                 return;
             }
@@ -237,12 +237,12 @@ impl Search {
             let mut new_rooms = rooms;
             new_rooms.set_bit(idx, true);
             if let Some(optimal_state) = self.optimal_visit_states.get_mut(&new_rooms) {
-                let new_hp = state.stat.hp + probe.diff.hp;
-                if new_hp <= optimal_state.stat.hp {
+                let new_hp = state.player.hp + probe.diff.hp;
+                if new_hp <= optimal_state.player.hp {
                     return;
                 }
                 let previous_visited = optimal_state.previous_visited();
-                optimal_state.stat.hp = new_hp;
+                optimal_state.player.hp = new_hp;
                 optimal_state.last_visit = room_id;
                 self.try_remove_optimal_state(previous_visited);
                 *self.optimal_visit_rc.entry(rooms).or_insert(0) += 1;

@@ -1,12 +1,11 @@
 use rust_dense_bitset::BitSet as _;
 use rust_dense_bitset::DenseBitSet as RoomSet;
 
-use super::{Level, PlayerStat};
+use super::{Level, Player};
 
 #[derive(Clone, Debug)]
 pub(super) struct Route {
-    pub(super) stat: PlayerStat,
-    // level: Level,
+    pub(super) player: Player,
     trace: Vec<u8>,
     neighbors: RoomSet,
     visited: RoomSet,
@@ -16,8 +15,7 @@ pub(super) struct Route {
 impl Route {
     pub(super) fn new() -> Self {
         Self {
-            stat: PlayerStat::default(),
-            // level: Level::new(),
+            player: Player::default(),
             trace: Vec::new(),
             neighbors: RoomSet::new(),
             visited: RoomSet::new(),
@@ -25,9 +23,9 @@ impl Route {
         }
     }
 
-    pub(super) fn with_stat(stat: PlayerStat) -> Self {
+    pub(super) fn with_player(player: Player) -> Self {
         Self {
-            stat,
+            player,
             ..Route::new()
         }
     }
@@ -40,9 +38,9 @@ impl Route {
     pub(super) fn visit(&mut self, room_id: u8, level: &Level) {
         let idx = room_id as usize;
         assert!(self.neighbors.get_bit(idx));
-        let probe = level.vertex(room_id).to_probe_stat(&self.stat.into());
-        assert!(self.stat.ge(&probe.req));
-        self.stat += probe.diff;
+        let probe = level.vertex(room_id).to_probe_stat(&self.player.into());
+        assert!(self.player.dominate(&probe.req));
+        self.player += probe.diff;
         self.trace.push(room_id);
         self.neighbors |= level.neighbors[idx];
         self.neighbors &= !level.excluded_neighbors[idx];

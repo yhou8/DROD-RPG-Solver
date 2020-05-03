@@ -1,4 +1,4 @@
-use super::stat::{EssStat, PlayerBehavior, PlayerStat, ProbeStat, StatDiff};
+use super::stat::{CombatStat, Player, PlayerBehavior, ProbeStat, StatDiff};
 
 bitflags! {
     struct MonsterBehavior: u32 {
@@ -16,7 +16,7 @@ bitflags! {
 }
 
 #[derive(Debug)]
-pub(super) struct MonsterStat {
+pub(super) struct Monster {
     behavior: MonsterBehavior,
     hp: i32,
     atk: i32,
@@ -25,26 +25,26 @@ pub(super) struct MonsterStat {
     rep: i32,
 }
 
-impl MonsterStat {
-    pub(super) fn to_probe_stat(&self, player: &EssStat) -> ProbeStat {
-        let player_atk = if player
+impl Monster {
+    pub(super) fn to_probe_stat(&self, stat: &CombatStat) -> ProbeStat {
+        let player_atk = if stat
             .behavior
             .contains(PlayerBehavior::DOUBLE_ATK_AGAINST_GOBLIN)
             && self.behavior.contains(MonsterBehavior::GOBLIN_WEAKNESS)
-            || player
+            || stat
                 .behavior
                 .contains(PlayerBehavior::DOUBLE_ATK_AGAINST_WYRM)
                 && self.behavior.contains(MonsterBehavior::WYRM_WEAKNESS)
         {
-            player.atk * 2
+            stat.atk * 2
         } else {
-            player.atk
+            stat.atk
         };
 
         let player_def = if self.behavior.contains(MonsterBehavior::NO_ENEMY_DEFENSE) {
             0
         } else {
-            player.def
+            stat.def
         };
 
         let monster_atk = if self.behavior.contains(MonsterBehavior::BRAINED_2) {
@@ -65,7 +65,7 @@ impl MonsterStat {
         } else {
             let mut hits = (self.hp - 1) / player_atk - monster_def;
             if self.behavior.contains(MonsterBehavior::ATTACK_FIRST)
-                || !player.behavior.contains(PlayerBehavior::HAS_WEAPON)
+                || !stat.behavior.contains(PlayerBehavior::HAS_WEAPON)
             {
                 hits += 1;
             }
@@ -90,12 +90,12 @@ impl MonsterStat {
 
         let gr_gain = if self.behavior.contains(MonsterBehavior::ONE_HIT) {
             0
-        } else if player
+        } else if stat
             .behavior
             .contains(PlayerBehavior::DOUBLE_GR_WEAPON | PlayerBehavior::DOUBLE_GR_ACCESSORY)
         {
             self.gr * 4
-        } else if player
+        } else if stat
             .behavior
             .intersects(PlayerBehavior::DOUBLE_GR_WEAPON | PlayerBehavior::DOUBLE_GR_ACCESSORY)
         {
@@ -106,10 +106,7 @@ impl MonsterStat {
 
         let rep_gain = if self.behavior.contains(MonsterBehavior::ONE_HIT) {
             0
-        } else if player
-            .behavior
-            .contains(PlayerBehavior::DOUBLE_REP_ACCESSORY)
-        {
+        } else if stat.behavior.contains(PlayerBehavior::DOUBLE_REP_ACCESSORY) {
             self.rep * 2
         } else {
             self.rep
@@ -120,7 +117,7 @@ impl MonsterStat {
         diff.gr = gr_gain;
         diff.rep = rep_gain;
 
-        let mut req = PlayerStat::default();
+        let mut req = Player::default();
         req.hp = hp_cost;
 
         ProbeStat {

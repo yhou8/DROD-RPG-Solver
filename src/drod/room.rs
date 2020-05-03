@@ -1,6 +1,6 @@
-use super::monster::MonsterStat;
+use super::monster::Monster;
 use super::percent::PercentDamage;
-use super::stat::{EssStat, PlayerBehavior, PlayerStat, ProbeStat, StatDiff};
+use super::stat::{CombatStat, Player, PlayerBehavior, ProbeStat, StatDiff};
 
 bitflags! {
     pub(super) struct RoomType: u32 {
@@ -14,18 +14,18 @@ bitflags! {
 enum RoomElement {
     Resource(StatDiff),
     Cost(StatDiff),
-    Requirement(PlayerStat),
-    Monster(MonsterStat),
+    Requirement(Player),
+    Monster(Monster),
     Equipment(StatDiff),
     Percent(PercentDamage),
 }
 
 impl RoomElement {
-    pub(super) fn to_probe_stat(&self, player: &EssStat) -> ProbeStat {
+    pub(super) fn to_probe_stat(&self, stat: &CombatStat) -> ProbeStat {
         match self {
             RoomElement::Resource(resource) => ProbeStat {
                 diff: *resource,
-                req: PlayerStat::default(),
+                req: Player::default(),
                 loss: 0,
             },
             RoomElement::Cost(cost) => ProbeStat {
@@ -38,32 +38,31 @@ impl RoomElement {
                 req: *req,
                 loss: 0,
             },
-            RoomElement::Monster(monster) => monster.to_probe_stat(player),
+            RoomElement::Monster(monster) => monster.to_probe_stat(stat),
             RoomElement::Equipment(equip) => {
                 let mut new_behavior = PlayerBehavior::empty();
-                if equip.equip_atk >= player.equip_atk && equip.equip_atk > 0 {
-                    new_behavior = player.behavior & !PlayerBehavior::WEAPON_ATTR | equip.behavior;
-                } else if equip.equip_def >= player.equip_def && equip.equip_def > 0 {
-                    new_behavior = player.behavior
+                if equip.equip_atk >= stat.equip_atk && equip.equip_atk > 0 {
+                    new_behavior = stat.behavior & !PlayerBehavior::WEAPON_ATTR | equip.behavior;
+                } else if equip.equip_def >= stat.equip_def && equip.equip_def > 0 {
+                    new_behavior = stat.behavior
                 } else if equip.equip_atk == 0 && equip.equip_def == 0 {
-                    new_behavior =
-                        player.behavior & !PlayerBehavior::ACCESSORY_ATTR | equip.behavior;
+                    new_behavior = stat.behavior & !PlayerBehavior::ACCESSORY_ATTR | equip.behavior;
                 }
 
                 let mut diff = StatDiff::default();
-                diff.behavior = new_behavior ^ player.behavior;
-                diff.atk = 0.max(equip.equip_atk - player.equip_atk);
-                diff.def = 0.max(equip.equip_def - player.equip_def);
-                diff.equip_atk = 0.max(equip.equip_atk - player.equip_atk);
-                diff.equip_def = 0.max(equip.equip_def - player.equip_def);
+                diff.behavior = new_behavior ^ stat.behavior;
+                diff.atk = 0.max(equip.equip_atk - stat.equip_atk);
+                diff.def = 0.max(equip.equip_def - stat.equip_def);
+                diff.equip_atk = 0.max(equip.equip_atk - stat.equip_atk);
+                diff.equip_def = 0.max(equip.equip_def - stat.equip_def);
 
                 ProbeStat {
                     diff,
-                    req: PlayerStat::default(),
+                    req: Player::default(),
                     loss: 0,
                 }
             }
-            RoomElement::Percent(percent) => percent.to_probe_stat(player),
+            RoomElement::Percent(percent) => percent.to_probe_stat(stat),
         }
     }
 }
@@ -76,13 +75,13 @@ pub(super) struct Room {
 }
 
 impl Room {
-    pub(super) fn to_probe_stat(&self, player: &EssStat) -> ProbeStat {
-        let mut stat = PlayerStat::from(*player);
+    pub(super) fn to_probe_stat(&self, stat: &CombatStat) -> ProbeStat {
+        let mut player = Player::from(*stat);
         let mut res = ProbeStat::default();
         for element in &self.content {
-            let probe = element.to_probe_stat(&stat.into());
+            let probe = element.to_probe_stat(&player.into());
             res += probe;
-            stat += probe.diff;
+            player += probe.diff;
         }
         res
     }

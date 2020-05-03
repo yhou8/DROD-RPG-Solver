@@ -27,6 +27,7 @@ pub(super) struct StatDiff {
     yk: i32,
     gk: i32,
     bk: i32,
+    sk: i32,
 }
 
 impl StatDiff {
@@ -42,6 +43,7 @@ impl StatDiff {
             && self.yk >= other.yk
             && self.gk >= other.gk
             && self.bk >= other.bk
+            && self.sk >= other.sk
     }
 }
 
@@ -58,6 +60,7 @@ impl AddAssign for StatDiff {
         self.yk += other.yk;
         self.gk += other.gk;
         self.bk += other.bk;
+        self.sk += other.sk;
     }
 }
 
@@ -78,6 +81,7 @@ impl Neg for StatDiff {
             yk: -self.yk,
             gk: -self.gk,
             bk: -self.bk,
+            sk: -self.sk,
         }
     }
 }
@@ -97,6 +101,7 @@ pub struct PlayerStat {
     yk: i32,
     gk: i32,
     bk: i32,
+    sk: i32,
 }
 
 impl PlayerStat {
@@ -104,12 +109,12 @@ impl PlayerStat {
     pub(super) fn score(&self) -> i32 {
         // Default score formula for ToTS floors 25 and 49
         // (self.hp + 1) * 25
-        //     + (self.atk * 5 + self.yk * 10 + self.gk * 20 + self.bk + 30) * 1000
+        //     + (self.atk * 5 + self.yk * 10 + self.gk * 20 + self.bk * 30 + self.sk * 30) * 1000
         //     + self.def * 1000 / 10 * 3;
 
         // Default score formula for DROD RPG
         (self.hp + 1) * 25
-            + (self.atk * 5 + self.def * 3 + self.yk * 10 + self.gk * 20 + self.bk + 30) * 1000
+            + (self.atk * 5 + self.def * 3 + self.yk * 10 + self.gk * 20 + self.bk * 30 + self.sk * 30) * 1000
     }
 
     fn join(&mut self, other: Self) {
@@ -124,6 +129,7 @@ impl PlayerStat {
         self.yk = self.yk.max(other.yk);
         self.gk = self.gk.max(other.gk);
         self.bk = self.bk.max(other.bk);
+        self.sk = self.sk.max(other.sk);
     }
 
     pub(super) fn ge(&self, other: &Self) -> bool {
@@ -138,6 +144,7 @@ impl PlayerStat {
             && self.yk >= other.yk
             && self.gk >= other.gk
             && self.bk >= other.bk
+            && self.sk >= other.sk
     }
 }
 
@@ -155,6 +162,7 @@ impl From<StatDiff> for PlayerStat {
             yk: stat.yk,
             gk: stat.gk,
             bk: stat.bk,
+            sk: stat.sk,
         }
     }
 }
@@ -186,6 +194,7 @@ impl AddAssign<StatDiff> for PlayerStat {
         self.yk += other.yk;
         self.gk += other.gk;
         self.bk += other.bk;
+        self.sk += other.sk;
     }
 }
 
@@ -205,6 +214,7 @@ impl Sub<StatDiff> for PlayerStat {
             yk: self.yk - other.yk,
             gk: self.gk - other.gk,
             bk: self.bk - other.bk,
+            sk: self.sk - other.sk,
         }
     }
 }

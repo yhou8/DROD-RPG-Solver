@@ -163,6 +163,7 @@ impl From<EssStat> for PlayerStat {
     fn from(stat: EssStat) -> Self {
         Self {
             behavior: stat.behavior,
+            hp: stat.hp,
             atk: stat.atk,
             def: stat.def,
             equip_atk: stat.equip_atk,
@@ -211,6 +212,7 @@ impl Sub<StatDiff> for PlayerStat {
 #[derive(Clone, Copy, Debug, Default, Eq, Hash, PartialEq)]
 pub(super) struct EssStat {
     pub(super) behavior: PlayerBehavior,
+    pub(super) hp: i32,
     pub(super) atk: i32,
     pub(super) def: i32,
     pub(super) equip_atk: i32,
@@ -221,6 +223,7 @@ impl From<PlayerStat> for EssStat {
     fn from(stat: PlayerStat) -> Self {
         Self {
             behavior: stat.behavior,
+            hp: stat.hp,
             atk: stat.atk,
             def: stat.def,
             equip_atk: stat.equip_atk,

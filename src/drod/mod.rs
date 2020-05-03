@@ -2,6 +2,7 @@ mod bitset_iter;
 mod essplayer;
 mod level;
 mod monster;
+mod percent;
 mod player;
 mod room;
 mod search;

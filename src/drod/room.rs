@@ -1,4 +1,5 @@
 use super::monster::MonsterStat;
+use super::percent::PercentDamage;
 use super::stat::{EssStat, PlayerBehavior, PlayerStat, ProbeStat, StatDiff};
 
 bitflags! {
@@ -16,6 +17,7 @@ enum RoomElement {
     Requirement(PlayerStat),
     Monster(MonsterStat),
     Equipment(StatDiff),
+    Percent(PercentDamage),
 }
 
 impl RoomElement {
@@ -61,6 +63,7 @@ impl RoomElement {
                     loss: 0,
                 }
             }
+            RoomElement::Percent(percent) => percent.to_probe_stat(player),
         }
     }
 }

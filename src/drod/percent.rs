@@ -7,7 +7,7 @@ pub(super) struct PercentDamage {
 }
 
 impl PercentDamage {
-    pub(super) fn to_probe_stat(&self, player: &CombatStat) -> ProbeStat {
+    pub(super) fn probe(&self, player: &CombatStat) -> ProbeStat {
         todo!()
         // let damage_scaled = (player.hp + 1) * self.percent;
         // let mut hp_cost = damage_scaled / 100;

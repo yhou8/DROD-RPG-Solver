@@ -21,24 +21,24 @@ enum RoomElement {
 }
 
 impl RoomElement {
-    pub(super) fn to_probe_stat(&self, stat: &CombatStat) -> ProbeStat {
+    pub(super) fn probe(&self, stat: &CombatStat) -> ProbeStat {
         match self {
             RoomElement::Resource(resource) => ProbeStat {
                 diff: *resource,
                 req: Player::default(),
-                loss: 0,
+                damage: 0,
             },
             RoomElement::Cost(cost) => ProbeStat {
                 diff: -*cost,
                 req: (*cost).into(),
-                loss: 0,
+                damage: 0,
             },
             RoomElement::Requirement(req) => ProbeStat {
                 diff: StatDiff::default(),
                 req: *req,
-                loss: 0,
+                damage: 0,
             },
-            RoomElement::Monster(monster) => monster.to_probe_stat(stat),
+            RoomElement::Monster(monster) => monster.probe(stat),
             RoomElement::Equipment(equip) => {
                 let mut new_behavior = PlayerBehavior::empty();
                 if equip.equip_atk >= stat.equip_atk && equip.equip_atk > 0 {
@@ -59,27 +59,27 @@ impl RoomElement {
                 ProbeStat {
                     diff,
                     req: Player::default(),
-                    loss: 0,
+                    damage: 0,
                 }
             }
-            RoomElement::Percent(percent) => percent.to_probe_stat(stat),
+            RoomElement::Percent(percent) => percent.probe(stat),
         }
     }
 }
 
 #[derive(Debug)]
 pub(super) struct Room {
-    name: String,
+    pub(super) name: String,
     content: Vec<RoomElement>,
     pub(super) room_type: RoomType,
 }
 
 impl Room {
-    pub(super) fn to_probe_stat(&self, stat: &CombatStat) -> ProbeStat {
+    pub(super) fn probe(&self, stat: &CombatStat) -> ProbeStat {
         let mut player = Player::from(*stat);
         let mut res = ProbeStat::default();
         for element in &self.content {
-            let probe = element.to_probe_stat(&player.into());
+            let probe = element.probe(&player.into());
             res += probe;
             player += probe.diff;
         }

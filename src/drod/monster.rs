@@ -26,7 +26,7 @@ pub(super) struct Monster {
 }
 
 impl Monster {
-    pub(super) fn to_probe_stat(&self, stat: &CombatStat) -> ProbeStat {
+    pub(super) fn probe(&self, stat: &CombatStat) -> ProbeStat {
         let player_atk = if stat
             .behavior
             .contains(PlayerBehavior::DOUBLE_ATK_AGAINST_GOBLIN)
@@ -57,7 +57,7 @@ impl Monster {
 
         let monster_def = self.def;
 
-        let hp_cost = if player_atk <= monster_def {
+        let damage = if player_atk <= monster_def {
             // TODO shift by another amount?
             1 << 24
         } else if player_def >= monster_atk {
@@ -113,17 +113,13 @@ impl Monster {
         };
 
         let mut diff = StatDiff::default();
-        diff.hp = -hp_cost;
+        diff.hp = -damage;
         diff.gr = gr_gain;
         diff.rep = rep_gain;
 
         let mut req = Player::default();
-        req.hp = hp_cost;
+        req.hp = damage;
 
-        ProbeStat {
-            diff: diff,
-            req: req,
-            loss: hp_cost,
-        }
+        ProbeStat { diff, req, damage }
     }
 }

@@ -1,4 +1,5 @@
 use std::collections::{HashMap, VecDeque};
+use std::rc::Rc;
 use std::u8;
 
 use rust_dense_bitset::BitSet as _;
@@ -7,20 +8,19 @@ use rust_dense_bitset::DenseBitSet as RoomSet;
 use super::bitset_iter::BitSetIter;
 use super::room::RoomType;
 use super::route::Route;
-use super::stat::{CombatStat, Player, ProbeStat, StatDiff};
+use super::stat::{CombatStat, Player, ProbeStat};
 use super::Level;
 use super::RouteState;
 
 struct ExtendedProbeStat {
     room_id: u8,
     probe: ProbeStat,
-    loss: bool,
     free: bool,
     priority: bool,
 }
 
 pub struct Search {
-    level: Level,
+    level: Rc<Level>,
     optimal_route: Route,
     optimal_route_score: i32,
     local_optimal_routes: Vec<Route>,
@@ -39,10 +39,11 @@ impl Search {
         init_state.enter(&level);
         let mut optimal_states = HashMap::new();
         optimal_states.insert(RoomSet::new(), init_state);
+        let level = Rc::new(level);
 
         Self {
-            level,
-            optimal_route: Route::new(),
+            level: Rc::clone(&level),
+            optimal_route: Route::new(init_player, Rc::clone(&level)),
             optimal_route_score: 0,
             local_optimal_routes: Vec::new(),
             optimal_visit_states: optimal_states,
@@ -98,7 +99,7 @@ impl Search {
                 let intermediate = room_type.contains(RoomType::INTERMEDIATE);
                 let free = neighbor != self.level.exit
                     && !intermediate
-                    && probe_stat.loss == 0
+                    && probe_stat.damage == 0
                     && probe_stat.diff.is_free();
                 if !free && room_type.contains(RoomType::ONLY_WHEN_FREE) {
                     continue;
@@ -108,7 +109,6 @@ impl Search {
                 extended_probe_result.push(ExtendedProbeStat {
                     room_id: neighbor,
                     probe: probe_stat,
-                    loss: probe_stat.loss > 0,
                     free,
                     priority,
                 });
@@ -140,8 +140,7 @@ impl Search {
     }
 
     fn to_route(&self, state: RouteState) -> Route {
-        let mut route = Route::with_player(self.init_state.player);
-        route.enter(&self.level);
+        let mut route = Route::new(self.init_state.player, Rc::clone(&self.level));
         let mut trace = Vec::new();
         let mut state = state;
         while state.visited != self.init_state.visited {
@@ -161,7 +160,7 @@ impl Search {
             result.clone()
         } else {
             let result: Vec<ProbeStat> = (0..self.level.next_id)
-                .map(|i| self.level.vertex(i).to_probe_stat(stat))
+                .map(|i| self.level.vertex(i).probe(stat))
                 .collect();
             self.probe_result.insert(*stat, result.clone());
             result
@@ -225,13 +224,16 @@ impl Search {
                 return;
             }
 
+            // Print high score
+            println!("New High Score {}", route);
+            println!(
+                "--------------------------------------------------------------------------------"
+            );
+
             self.try_remove_optimal_state(self.optimal_route.previous_visited);
             self.optimal_route = route;
             self.optimal_route_score = score;
             *self.optimal_visit_rc.entry(rooms).or_insert(0) += 1;
-
-            // Print high score
-            todo!()
         } else {
             let idx = room_id as usize;
             let mut new_rooms = rooms;

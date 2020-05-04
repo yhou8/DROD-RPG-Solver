@@ -1,3 +1,4 @@
+use std::fmt::{Display, Formatter, Result};
 use std::ops::{AddAssign, Neg, Sub};
 
 bitflags! {
@@ -11,6 +12,32 @@ bitflags! {
         const DOUBLE_ATK_AGAINST_WYRM   = 0b100000;
         const WEAPON_ATTR = Self::HAS_WEAPON.bits | Self::DOUBLE_GR_WEAPON.bits | Self::DOUBLE_ATK_AGAINST_GOBLIN.bits | Self::DOUBLE_ATK_AGAINST_WYRM.bits;
         const ACCESSORY_ATTR = Self::DOUBLE_GR_ACCESSORY.bits | Self::DOUBLE_REP_ACCESSORY.bits;
+    }
+}
+
+impl Display for PlayerBehavior {
+    fn fmt(&self, f: &mut Formatter<'_>) -> Result {
+        let mut behavior_str = "Behavior:".to_string();
+        if self.contains(PlayerBehavior::HAS_WEAPON) {
+            behavior_str += " HAS_WEAPON";
+        }
+        if self.contains(PlayerBehavior::DOUBLE_GR_WEAPON) {
+            behavior_str += " DOUBLE_GR_WEAPON";
+        }
+        if self.contains(PlayerBehavior::DOUBLE_GR_ACCESSORY) {
+            behavior_str += " DOUBLE_GR_ACCESSORY";
+        }
+        if self.contains(PlayerBehavior::DOUBLE_REP_ACCESSORY) {
+            behavior_str += " DOUBLE_REP_ACCESSORY";
+        }
+        if self.contains(PlayerBehavior::DOUBLE_ATK_AGAINST_GOBLIN) {
+            behavior_str += " DOUBLE_ATK_AGAINST_GOBLIN";
+        }
+        if self.contains(PlayerBehavior::DOUBLE_ATK_AGAINST_WYRM) {
+            behavior_str += " DOUBLE_ATK_AGAINST_WYRM";
+        }
+
+        write!(f, "{}", behavior_str)
     }
 }
 
@@ -223,6 +250,25 @@ impl Sub<StatDiff> for Player {
     }
 }
 
+impl Display for Player {
+    fn fmt(&self, f: &mut Formatter<'_>) -> Result {
+        write!(
+            f,
+            "{{ {}, HP: {}, ATK: {}, DEF: {}, GR: {}, REP: {}, YK: {}, GK: {}, BK: {}, SK: {}}}",
+            self.behavior,
+            self.hp + 1,
+            self.atk,
+            self.def,
+            self.gr,
+            self.rep,
+            self.yk,
+            self.gk,
+            self.bk,
+            self.sk
+        )
+    }
+}
+
 #[derive(Clone, Copy, Debug, Default, Eq, Hash, PartialEq)]
 pub(super) struct CombatStat {
     pub(super) behavior: PlayerBehavior,
@@ -248,13 +294,13 @@ impl From<Player> for CombatStat {
 pub(super) struct ProbeStat {
     pub(super) diff: StatDiff,
     pub(super) req: Player,
-    pub(super) loss: i32,
+    pub(super) damage: i32,
 }
 
 impl AddAssign for ProbeStat {
     fn add_assign(&mut self, other: Self) {
         self.req.join(other.req - self.diff);
         self.diff += other.diff;
-        self.loss += other.loss;
+        self.damage += other.damage;
     }
 }

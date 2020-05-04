@@ -3,14 +3,17 @@ extern crate bitflags;
 extern crate rust_dense_bitset;
 
 mod drod;
-use drod::{Level, Player, RouteState, Search};
+use drod::{Level, Player, Solver};
 
 fn main() {
     let init_player = Player::default();
-    loop {
-        let level = Level::new();
-        let mut search = Search::new(level, init_player);
-        let _init_step = RouteState::with_player(init_player);
-        search.search();
+    let level = Level::new();
+    let solver = Solver::new(level, init_player);
+
+    println!("--------------------------------------------------------------------------------");
+    match solver.find_solution() {
+        None => println!("Cannot find route through level"),
+        Some(solution) => println!("{}", solution),
     }
+    println!("--------------------------------------------------------------------------------");
 }

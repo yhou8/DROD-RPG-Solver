@@ -252,6 +252,7 @@ impl Sub<StatDiff> for Player {
 
 impl Display for Player {
     fn fmt(&self, f: &mut Formatter<'_>) -> Result {
+        // TODO format score
         write!(
             f,
             "{{ {}, HP: {}, ATK: {}, DEF: {}, GR: {}, REP: {}, YK: {}, GK: {}, BK: {}, SK: {}}}",

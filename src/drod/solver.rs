@@ -6,9 +6,7 @@ use std::u8;
 use rust_dense_bitset::BitSet as _;
 use rust_dense_bitset::DenseBitSet as RoomSet;
 
-use super::room::RoomType;
-use super::stat::{CombatStat, Player, ProbeStat};
-use super::Level;
+use super::model::{CombatStat, Level, Player, ProbeStat, RoomType};
 
 // An iterator for DenseBitSet that returns the position of each enabled bit in the set
 struct BitSetIter(RoomSet);
@@ -236,20 +234,20 @@ impl Solver {
             if has_priority {
                 for room in extended_probes {
                     if room.priority {
-                        self.update_optimal_route(room.room_id, state, &room.probe);
+                        self.update_optimal_route(room.room_id, &state, &room.probe);
                         break;
                     }
                 }
             } else if has_free {
                 for room in extended_probes {
                     if room.free {
-                        self.update_optimal_route(room.room_id, state, &room.probe);
+                        self.update_optimal_route(room.room_id, &state, &room.probe);
                         break;
                     }
                 }
             } else {
                 for room in extended_probes {
-                    self.update_optimal_route(room.room_id, state, &room.probe);
+                    self.update_optimal_route(room.room_id, &state, &room.probe);
                 }
             }
             if self.optimal_visit_rc[&rooms_visited] == 0 {
@@ -268,8 +266,8 @@ impl Solver {
     }
 
     // Construct full route used to reach state
-    fn to_route(&self, state: RouteState) -> Route {
-        let mut state = state;
+    fn to_route(&self, state: &RouteState) -> Route {
+        let mut state = *state;
         let mut trace = Vec::new();
         while state.visited != self.init_state.visited {
             trace.push(state.last_visit);
@@ -318,8 +316,8 @@ impl Solver {
     }
 
     // Check whether current route is most optimal way to visit set of rooms
-    fn update_optimal_route(&mut self, room_id: u8, state: RouteState, probe: &ProbeStat) {
-        let mut state = state;
+    fn update_optimal_route(&mut self, room_id: u8, state: &RouteState, probe: &ProbeStat) {
+        let mut state = *state;
         let rooms = state.visited;
         if room_id == self.level.exit {
             state.visit(room_id, &self.level, probe);
@@ -341,7 +339,7 @@ impl Solver {
                 return;
             }
 
-            let route = self.to_route(state);
+            let route = self.to_route(&state);
             self.local_optimal_routes.push(route.clone());
 
             let score = state.player.score();

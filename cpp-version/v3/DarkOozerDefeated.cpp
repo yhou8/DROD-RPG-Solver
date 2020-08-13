@@ -19,7 +19,6 @@ LevelPtr LEVEL_NAME::build() const {
 	level >> new Room{"exit", {}};
 	level()->setExit("exit");
 
-
 	constexpr auto DFireSpider = DMonster({HP: 52, ATK: 32, DEF: 8, GR: 3});
 	constexpr auto DDarkOozer = DMonster({HP: 66, ATK: 82, DEF: 20, GR: 10});
 
@@ -33,7 +32,7 @@ LevelPtr LEVEL_NAME::build() const {
 	level >> "O" >> new Room{"L1", {DYD, DFireSpider, {DATK(2), DDEF(1), DHP(200), DYK}}};
 	level >> "O" >> new Room{"L2", {DYD, DWraithwing, {DATK(1), DHP(50), DYK}}};
 	level >> "O" >> new Room{"L3", {DYD, DFireSpider, {DHP(50), DDEF(2), DYK}}};
-	level >> "O" >> new Room{"L4", {DYD, DSpider, {DATK(3), DYK})}};
+	level >> "O" >> new Room{"L4", {DYD, DSpider, {DATK(3), DYK}}};
 	level >> "O" >> new Room{"L5", {DYD, DFireSpider, {DDEF(2), DHP(200), DYK}}};
 
 	level >> "O" >> new Room{"Boss", {DGG(30), DRoach, DRoach, DRoach, DGG(10), DYD, DDarkOozer}}};

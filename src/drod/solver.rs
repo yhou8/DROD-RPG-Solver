@@ -58,7 +58,7 @@ impl RouteState {
         let idx = room_id as usize;
         self.player += probe.diff;
         self.neighbors |= level.neighbors[idx];
-        self.neighbors &= !level.excluded_neighbors[idx];
+        self.neighbors &= !level.toggle_neighbors[idx];
         self.neighbors &= !self.visited;
         self.last_visit = room_id;
         self.visited.set_bit(idx, true);
@@ -100,13 +100,13 @@ impl Route {
     fn visit(&mut self, room_id: u8) {
         let idx = room_id as usize;
         assert!(self.neighbors.get_bit(idx));
-        let probe = self.level.vertex(room_id).probe(&self.player.into());
+        let probe = self.level.vertex_of_id(room_id).probe(&self.player.into());
         assert!(self.player.dominate(&probe.req));
 
         self.player += probe.diff;
         self.trace.push(room_id);
         self.neighbors |= self.level.neighbors[idx];
-        self.neighbors &= !self.level.excluded_neighbors[idx];
+        self.neighbors &= !self.level.toggle_neighbors[idx];
         self.neighbors &= !self.visited;
         self.previous_visited = self.visited;
         self.visited.set_bit(idx, true);
@@ -123,7 +123,7 @@ impl Display for Route {
             } else {
                 trace_str += ", ";
             }
-            trace_str += &self.level.vertex(*id).name;
+            trace_str += &self.level.vertex_of_id(*id).name;
         }
         write!(f, "{}\n\nTrace: {}", self.player, trace_str)
     }
@@ -190,7 +190,7 @@ impl Solver {
                 false
             } else {
                 self.level
-                    .vertex(state.last_visit)
+                    .vertex_of_id(state.last_visit)
                     .room_type
                     .contains(RoomType::INTERMEDIATE)
             };
@@ -210,7 +210,7 @@ impl Solver {
                     continue;
                 }
 
-                let room_type = self.level.vertex(neighbor).room_type;
+                let room_type = self.level.vertex_of_id(neighbor).room_type;
                 let priority = room_type.contains(RoomType::PRIORITY_ROOM);
                 let intermediate = room_type.contains(RoomType::INTERMEDIATE);
                 let free = neighbor != self.level.exit
@@ -286,7 +286,7 @@ impl Solver {
     fn cache_room_probes(&mut self, stat: &CombatStat) {
         if !self.probe_cache.contains_key(stat) {
             let result: Vec<ProbeStat> = (0..self.level.next_id)
-                .map(|i| self.level.vertex(i).probe(stat))
+                .map(|i| self.level.vertex_of_id(i).probe(stat))
                 .collect();
             self.probe_cache.insert(*stat, result);
         }

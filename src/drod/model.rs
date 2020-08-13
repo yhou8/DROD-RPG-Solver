@@ -1,8 +1,9 @@
+use std::collections::HashMap;
 use std::fmt::{Display, Formatter, Result};
 use std::ops::{AddAssign, Neg, Sub};
 use std::u8;
 
-use rust_dense_bitset::DenseBitSet as RoomSet;
+use rust_dense_bitset::DenseBitSet as BitSet;
 
 // Ways that equipment affect the player
 bitflags! {
@@ -557,7 +558,7 @@ impl RoomElement {
 
 // Room contains a sequence of elements that must all be completed
 #[derive(Debug)]
-pub(super) struct Room {
+pub struct Room {
     pub(super) name: String,
     content: Vec<RoomElement>,
     pub(super) room_type: RoomType,
@@ -577,36 +578,156 @@ impl Room {
     }
 }
 
+// TODO split into builder
 // Represent level as a graph of rooms
 #[derive(Debug)]
 pub struct Level {
-    pub(super) entrance: u8,
-    pub(super) exit: u8,
+    pub next_id: u8,
+    pub vertices_mask: BitSet,
+    pub boundary_mask: BitSet,
+    pub neighbors: Vec<BitSet>,
+    pub toggle_neighbors: Vec<BitSet>,
+    pub use_edge: bool,
+    pub entrance: u8,
+    pub exit: u8,
 
-    // TODO add graph fields
-    pub(super) next_id: u8,
-    pub(super) neighbors: Vec<RoomSet>,
-    pub(super) excluded_neighbors: Vec<RoomSet>,
+    current_vertex_id: u8,
+    name2id: HashMap<String, u8>,
     vertices: Vec<Room>,
 }
 
 impl Level {
     pub fn new() -> Self {
         Self {
+            next_id: 0,
+            vertices_mask: BitSet::new(),
+            boundary_mask: BitSet::new(),
+            neighbors: Vec::new(),
+            toggle_neighbors: Vec::new(),
+            use_edge: false,
             entrance: u8::MAX,
             exit: u8::MAX,
-
-            next_id: 0,
-            neighbors: Vec::new(),
-            excluded_neighbors: Vec::new(),
+            current_vertex_id: u8::MAX,
+            name2id: HashMap::new(),
             vertices: Vec::new(),
         }
     }
 
-    pub(super) fn vertex(&self, room_id: u8) -> &Room {
-        let idx = room_id as usize;
-        &self.vertices[idx]
+    pub fn select_id(&mut self, id: u8) -> &mut Self {
+        self.current_vertex_id = id;
+        self
+    }
+
+    pub fn select_name(&mut self, name: &str) -> &mut Self {
+        self.select_id(self.id(name))
+    }
+
+    pub fn select_room(&mut self, room: Room) -> &mut Self {
+        if self.name2id.contains_key(&room.name) {
+            // TODO improve error reporting
+            panic!(String::from("the room has aleady been added: ") + &room.name);
+        }
+        self.vertices_mask.insert(self.next_id as usize, 1, 1);
+        if room.room_type.is_empty() {
+        // if room.room_type.contains(DRepeatedRoom) {
+            self.boundary_mask.insert(self.next_id as usize, 1, 1);
+        }
+        self.current_vertex_id = self.next_id;
+        self.next_id += 1;
+        self.name2id.insert(room.name.clone(), self.current_vertex_id);
+        self.vertices.push(room);
+        self.neighbors.push(BitSet::new());
+        self.toggle_neighbors.push(BitSet::new());
+        self
+    }
+
+    pub fn add_arc(&mut self, id0: u8, id1: u8) -> &mut Self {
+        if id0 < self.next_id && id1 < self.next_id {
+            self.neighbors[id0 as usize].insert(id1 as usize, 1, 1)
+        }
+        self
+    }
+
+    pub fn add_id(&mut self, id: u8) -> &mut Self {
+        let id0 = self.current_vertex_id;
+        let id1 = self.select_id(id).current_vertex_id;
+        if self.use_edge {
+            self.add_arc(id1, id0);
+        }
+        self.add_arc(id0, id1)
+    }
+
+    pub fn add_name(&mut self, name: &str) -> &mut Self {
+        self.add_id(self.id(name))
+    }
+
+    pub fn add_room(&mut self, room: Room) -> &mut Self {
+        let id0 = self.current_vertex_id;
+        let id1 = self.select_room(room).current_vertex_id;
+        if self.use_edge {
+            self.add_arc(id1, id0);
+        }
+        self.add_arc(id0, id1)
+    }
+
+    pub fn toggle(&mut self, id0: u8, id1: u8) -> &mut Self {
+        if id0 < self.next_id && id1 < self.next_id {
+            self.toggle_neighbors[id0 as usize].insert(id1 as usize, 1, 1)
+        }
+        self
+    }
+
+    pub fn toggle_name(&mut self, name0: &str, name1: &str) -> &mut Self {
+        self.toggle(self.id(name0), self.id(name1))
+    }
+
+    pub fn id(&self, name: &str) -> u8 {
+        let id = self.name2id.get(name);
+        *id.expect(&(String::from("cannot find vertex with given name: ") + name))
+    }
+
+    pub fn reset(&mut self) -> &mut Self {
+        self.current_vertex_id = u8::MAX;
+        self
+    }
+
+    pub fn vertex(&self) -> &Room {
+        &self.vertices[self.current_vertex_id as usize]
+    }
+
+    pub fn vertex_of_id(&self, id: u8) -> &Room {
+        &self.vertices[id as usize]
+    }
+
+    pub fn vertex_of_name(&self, name: &str) -> &Room {
+        self.vertex_of_id(self.id(name))
+    }
+
+    pub fn set_entrance(&mut self) -> &mut Self {
+        self.entrance = self.current_vertex_id;
+        self
+    }
+
+    pub fn set_entrance_id(&mut self, id: u8) -> &mut Self {
+        self.entrance = id;
+        self
+    }
+
+    pub fn set_entrance_name(&mut self, name: &str) -> &mut Self {
+        self.set_entrance_id(self.id(name))
+    }
+
+    pub fn set_exit(&mut self) -> &mut Self {
+        self.exit = self.current_vertex_id;
+        self
+    }
+
+    pub fn set_exit_id(&mut self, id: u8) -> &mut Self {
+        self.exit = id;
+        self
+    }
+
+    pub fn set_exit_name(&mut self, name: &str) -> &mut Self {
+        self.set_exit_id(self.id(name))
     }
 }
-
-// TODO add builder for levels

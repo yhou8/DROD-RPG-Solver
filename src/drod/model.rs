@@ -481,129 +481,127 @@ impl HPBoostStat {
 
 // Monster behavior that affect combat
 bitflags! {
-    struct MonsterBehavior: u32 {
-        const GOBLIN_WEAKNESS       = 0b00000000001;
-        const WYRM_WEAKNESS         = 0b00000000010;
-        const ATTACK_FIRST          = 0b00000000100;
-        const ATTACK_LAST           = 0b00000001000;
-        const ATTACK_AUTO           = 0b00000010000;    // Monster is attacked from square it automatically attacks
-        const ATTACK_WEAPON         = 0b00000100000;    // Monster is attacked from square its sword is on
-        const NO_ENEMY_DEFENSE      = 0b00001000000;
-        const SURPRISED_FROM_BEHIND = 0b00010000000;
-        const BRAINED               = 0b00100000000;
-        const BRAINED_2             = 0b01000000000;    // TODO support arbitrary number of brains?
-        const ONE_HIT               = 0b10000000000;
+    struct MonsterFlag: u16 {
+        const ONE_HIT               = 0b0000000001;
+        const ATTACK_FIRST          = 0b0000000010;
+        const SURPRISED_FROM_BEHIND = 0b0000000100;
+        const ATTACK_LAST           = 0b0000001000;
+        const NO_ENEMY_DEFENSE      = 0b0000010000;
+        const HAS_WEAPON            = 0b0000100000;
+        const GOBLIN_WEAKNESS       = 0b0001000000;
+        const WYRM_WEAKNESS         = 0b0010000000;
+        const BRAINED               = 0b0100000000;
+        const BRAINED2              = 0b1000000000;
     }
 }
 
 // Stats of a monster
 #[derive(Debug)]
-struct Monster {
-    behavior: MonsterBehavior,
-    hp: i32,
-    atk: i16,
-    def: i16,
-    gr: i16,
-    rep: i32,
+struct MonsterStat {
+    pub flag: MonsterFlag,
+    pub hp: i32,
+    pub atk: i16,
+    pub def: i16,
+    pub gr: i16,
 }
 
-impl Monster {
+impl MonsterStat {
     // Results of fighting a monster
-    fn probe(&self, stat: &PlayerCombat) -> ProbeStat {
-        let player_atk = if stat.flag.contains(PlayerFlag::DOUBLE_ATK_AGAINST_GOBLIN)
-            && self.behavior.contains(MonsterBehavior::GOBLIN_WEAKNESS)
-            || stat.flag.contains(PlayerFlag::DOUBLE_ATK_AGAINST_WYRM)
-                && self.behavior.contains(MonsterBehavior::WYRM_WEAKNESS)
+    fn probe(&self, player: &PlayerCombat) -> ProbeStat {
+        if player.flag.contains(PlayerFlag::DEAD) {
+            return ProbeStat::default();
+        }
+
+        let player_atk = if player.flag.contains(PlayerFlag::DOUBLE_ATK_AGAINST_GOBLIN)
+            && self.flag.contains(MonsterFlag::GOBLIN_WEAKNESS)
+            || player.flag.contains(PlayerFlag::DOUBLE_ATK_AGAINST_WYRM)
+                && self.flag.contains(MonsterFlag::WYRM_WEAKNESS)
         {
-            stat.atk * 2
+            player.atk as i32 * 2
         } else {
-            stat.atk
+            player.atk as i32
         };
 
-        let player_def = if self.behavior.contains(MonsterBehavior::NO_ENEMY_DEFENSE) {
+        let player_def = if self.flag.contains(MonsterFlag::NO_ENEMY_DEFENSE) {
             0
         } else {
-            stat.def
+            player.def as i32
         };
 
-        let monster_atk = if self.behavior.contains(MonsterBehavior::BRAINED_2) {
-            self.atk * 4
-        } else if self.behavior.contains(MonsterBehavior::BRAINED) {
-            self.atk * 2
+        let monster_atk = if self.flag.contains(MonsterFlag::BRAINED2) {
+            self.atk as i32 * 4
+        } else if self.flag.contains(MonsterFlag::BRAINED) {
+            self.atk as i32 * 2
         } else {
-            self.atk
+            self.atk as i32
         };
 
-        let monster_def = self.def;
+        let monster_def = self.def as i32;
+        let monster_hp = self.hp;
 
-        let damage = if player_atk <= monster_def {
-            // TODO shift by another amount?
-            1 << 24
-        } else if player_def >= monster_atk {
+        if player_atk <= monster_def {
+            let dead = PlayerStat {
+                flag: PlayerFlag::DEAD,
+                ..Default::default()
+            };
+            return ProbeStat {
+                diff: dead,
+                req: dead,
+            };
+        }
+
+        let hp_cost = if player_def >= monster_atk {
             0
         } else {
             // Number of hits when attacking with sword against default monster
-            let mut hits = (self.hp - 1) / (player_atk - monster_def) as i32;
+            let hits = (monster_hp - 1) / (player_atk - monster_def);
 
-            // Monster attacks first if it has behavior or player attacks without sword and monster lacks attack last behavior
-            if self.behavior.contains(MonsterBehavior::ATTACK_FIRST)
-                || !self.behavior.contains(MonsterBehavior::ATTACK_LAST)
-                    && !stat.flag.contains(PlayerFlag::HAS_WEAPON)
+            // Monster attacks first if it has behavior or player attacks without sword
+            if self.flag.contains(MonsterFlag::ATTACK_FIRST)
+                || !player.flag.contains(PlayerFlag::HAS_WEAPON)
             {
                 hits += 1;
             }
 
-            // Monsters attacked from behind loses its first hit if any
-            if self
-                .behavior
-                .contains(MonsterBehavior::SURPRISED_FROM_BEHIND)
-                && hits > 0
-            {
+            if self.flag.contains(MonsterFlag::ATTACK_LAST) && hits > 0 {
                 hits -= 1;
             }
 
-            // Automatic damage is avoided if player can start fight using sword on same turn as stepping on attacked square
-            if self.behavior.contains(MonsterBehavior::ATTACK_AUTO)
-                && !stat.flag.contains(PlayerFlag::HAS_WEAPON)
-            {
-                hits += 1;
+            // Monsters attacked from behind loses its first hit if any
+            if self.flag.contains(MonsterFlag::SURPRISED_FROM_BEHIND) && hits > 0 {
+                hits -= 1;
             }
 
-            // Stepping on a sword causes damage before starting combat and attacking without sword still cause an extra hit
-            if self.behavior.contains(MonsterBehavior::ATTACK_WEAPON) {
+            // Stepping on a sword causes damage before starting combat
+            if self.flag.contains(MonsterFlag::HAS_WEAPON) {
                 hits += 1;
-                if !stat.flag.contains(PlayerFlag::HAS_WEAPON) {
-                    hits += 1;
-                }
             }
 
             // Represents taking a single hit from automatic attack or sword without fighting
-            if self.behavior.contains(MonsterBehavior::ONE_HIT) {
+            if self.flag.contains(MonsterFlag::ONE_HIT) {
                 hits = 1;
             }
-            hits * (monster_atk - player_def) as i32
+            hits * (monster_atk - player_def)
         };
 
-        let gr_gain = if self.behavior.contains(MonsterBehavior::ONE_HIT) {
+        let monster_gr = if self.flag.contains(MonsterFlag::ONE_HIT) {
             0
-        } else if stat.flag.contains(PlayerFlag::DOUBLE_GR_WEAPON) {
+        } else if player.flag.contains(PlayerFlag::DOUBLE_GR_WEAPON) {
             self.gr * 2
         } else {
             self.gr
         };
 
-        let rep_gain = if self.behavior.contains(MonsterBehavior::ONE_HIT) {
-            0
-        } else {
-            self.rep
+        let diff = PlayerStat {
+            hp: -hp_cost,
+            gr: monster_gr,
+            ..Default::default()
         };
 
-        let mut diff = PlayerStat::default();
-        diff.hp = -damage;
-        diff.gr = gr_gain;
-
-        let mut req = PlayerStat::default();
-        req.hp = damage;
+        let req = PlayerStat {
+            hp: hp_cost,
+            ..Default::default()
+        };
 
         ProbeStat { diff, req }
     }
@@ -624,7 +622,7 @@ enum RoomElement {
     Resource(PlayerStat),    // Gives player stats
     Cost(PlayerStat),        // Removes player stats
     Requirement(PlayerStat), // Requires certain stats to fight
-    Monster(Monster),        // Fight monster to pass
+    Monster(MonsterStat),    // Fight monster to pass
     Equipment(PlayerStat),   // Gives player equipment, replaces old equipment
 }
 

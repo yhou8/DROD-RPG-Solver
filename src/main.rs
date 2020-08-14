@@ -3,10 +3,10 @@ extern crate bitflags;
 extern crate rust_dense_bitset;
 
 mod drod;
-use drod::{Level, Player, Solver};
+use drod::{Level, PlayerStat, Solver};
 
 fn main() {
-    let init_player = Player::default();
+    let init_player = PlayerStat::default();
     let level = Level::new();
     let solver = Solver::new(level, init_player);
 

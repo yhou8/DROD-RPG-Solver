@@ -9,7 +9,7 @@ use rust_dense_bitset::DenseBitSet as BitSet;
 // Ways that equipment affect the player
 bitflags! {
     #[derive(Default)]
-    struct PlayerFlag: u8 {
+    pub struct PlayerFlag: u8 {
         const DEAD                      = 0b00001;
         const HAS_WEAPON                = 0b00010;
         const DOUBLE_GR_WEAPON          = 0b00100;
@@ -46,7 +46,7 @@ impl Display for PlayerFlag {
 // Player stats
 // HP is shifted by 1 so that 0 is considered alive.
 // This change makes code cleaner.
-#[derive(Default)]
+#[derive(Clone, Copy, Default)]
 pub struct PlayerStat {
     pub hp: i32,
     pub flag: PlayerFlag,
@@ -196,7 +196,7 @@ pub struct LevelStat {
     pub counter: i8,
 }
 
-#[derive(Default, Eq, PartialEq)]
+#[derive(Clone, Copy, Default, Eq, PartialEq)]
 pub struct PlayerCombat {
     pub hp: i32,
     pub flag: PlayerFlag,
@@ -243,7 +243,8 @@ impl PlayerCombat {
             writer,
             "Combat, hp:{}, flag:{}, atk:{}, def:{}, equip_flag:{}, equip_atk:{}, equip_def:{}",
             self.hp, self.flag, self.atk, self.def, self.equip_flag, self.equip_atk, self.equip_def
-        );
+        )
+        .expect("error writing PlayerCombat");
     }
 }
 
@@ -292,7 +293,7 @@ impl PlayerScore {
 }
 
 // Results of completing a room element
-#[derive(Default)]
+#[derive(Clone, Copy, Default)]
 pub struct ProbeStat {
     pub diff: PlayerStat,
     pub req: PlayerStat,
@@ -366,9 +367,9 @@ impl EquipStat {
         shield: bool,
         accessory: bool,
     ) -> ProbeStat {
-        let flag = PlayerFlag::empty();
-        let atk = 0;
-        let def = 0;
+        let mut flag = PlayerFlag::empty();
+        let mut atk = 0;
+        let mut def = 0;
         if weapon {
             flag |= player.equip_flag & PlayerFlag::WEAPON_MASK;
             atk = -player.equip_atk;
@@ -400,9 +401,9 @@ impl EquipStat {
         shield: bool,
         accessory: bool,
     ) -> ProbeStat {
-        let flag = PlayerFlag::empty();
-        let atk = 0;
-        let def = 0;
+        let mut flag = PlayerFlag::empty();
+        let mut atk = 0;
+        let mut def = 0;
         if weapon {
             flag |= player.equip_flag & PlayerFlag::WEAPON_MASK;
             atk = player.equip_atk;
@@ -429,7 +430,7 @@ impl EquipStat {
     }
 }
 
-pub struct HPBoostStat {
+pub struct HpBoostStat {
     pub hp: i32,
     pub flag: PlayerFlag,
     pub atk: i16,
@@ -444,7 +445,7 @@ pub struct HPBoostStat {
     pub counter: i8,
 }
 
-impl HPBoostStat {
+impl HpBoostStat {
     pub fn probe(&self, player: &PlayerCombat) -> ProbeStat {
         let hp_diff = Self::percent_floor(self.hp, player.hp + 1)
             + Self::percent_floor(self.atk, player.atk)
@@ -481,7 +482,7 @@ impl HPBoostStat {
 
 // Monster behavior that affect combat
 bitflags! {
-    struct MonsterFlag: u16 {
+    pub struct MonsterFlag: u16 {
         const ONE_HIT               = 0b0000000001;
         const ATTACK_FIRST          = 0b0000000010;
         const SURPRISED_FROM_BEHIND = 0b0000000100;
@@ -497,7 +498,7 @@ bitflags! {
 
 // Stats of a monster
 #[derive(Debug)]
-struct MonsterStat {
+pub struct MonsterStat {
     pub flag: MonsterFlag,
     pub hp: i32,
     pub atk: i16,
@@ -554,7 +555,7 @@ impl MonsterStat {
             0
         } else {
             // Number of hits when attacking with sword against default monster
-            let hits = (monster_hp - 1) / (player_atk - monster_def);
+            let mut hits = (monster_hp - 1) / (player_atk - monster_def);
 
             // Monster attacks first if it has behavior or player attacks without sword
             if self.flag.contains(MonsterFlag::ATTACK_FIRST)
@@ -607,85 +608,98 @@ impl MonsterStat {
     }
 }
 
-// Special ways room should be treated when visiting
-bitflags! {
-    pub(super) struct RoomType: u32 {
-        const INTERMEDIATE   = 0b001;   // Must leave through neighboring rooms
-        const ONLY_WHEN_FREE = 0b010;
-        const PRIORITY_ROOM  = 0b100;
-    }
-}
-
 // Types of elements in a room
 // #[derive(Debug)]
-enum RoomElement {
+pub enum Element {
     Resource(PlayerStat),    // Gives player stats
     Cost(PlayerStat),        // Removes player stats
     Requirement(PlayerStat), // Requires certain stats to fight
-    Monster(MonsterStat),    // Fight monster to pass
-    Equipment(PlayerStat),   // Gives player equipment, replaces old equipment
+    Counter(i8),
+    Monster(MonsterStat), // Fight monster to pass
+    Equipment(EquipStat), // Gives player equipment, replaces old equipment
+    Inventory {
+        equip: bool,
+        weapon: bool,
+        shield: bool,
+        accessory: bool,
+    },
+    HpBoost(HpBoostStat),
+    Room(Box<Room>),
+    // Choice,
 }
 
-impl RoomElement {
+impl Element {
     // Test results of going through room element
-    fn probe(&self, stat: &PlayerCombat) -> ProbeStat {
+    fn probe(&self, player: &PlayerCombat) -> ProbeStat {
         match self {
-            RoomElement::Resource(resource) => ProbeStat {
+            Element::Resource(resource) => ProbeStat {
                 diff: *resource,
                 req: PlayerStat::default(),
             },
-            RoomElement::Cost(cost) => ProbeStat {
+            Element::Cost(cost) => ProbeStat {
                 diff: -*cost,
-                req: (*cost).into(),
+                req: *cost,
             },
-            RoomElement::Requirement(req) => ProbeStat {
+            Element::Requirement(req) => ProbeStat {
                 diff: PlayerStat::default(),
                 req: *req,
             },
-            RoomElement::Monster(monster) => monster.probe(stat),
-            RoomElement::Equipment(equip) => {
-                // Pick up equipment, replace old one
-                // TODO handle equipment that can give both atk and def, option for swapping equipment using inventory
-                let mut diff = PlayerStat::default();
-                diff.atk = 0.max(equip.equip_atk - stat.equip_atk);
-                diff.def = 0.max(equip.equip_def - stat.equip_def);
-                diff.equip_atk = 0.max(equip.equip_atk - stat.equip_atk);
-                diff.equip_def = 0.max(equip.equip_def - stat.equip_def);
-
-                // By default weapons only give atk, shields only give def, accessory does not affect atk or def
-                if equip.equip_atk >= stat.equip_atk && equip.equip_atk > 0 {
-                    diff.flag = equip.flag;
-                } else if equip.equip_atk == 0 && equip.equip_def == 0 {
-                    diff.flag = equip.flag;
+            Element::Counter(set) => ProbeStat {
+                diff: PlayerStat {
+                    counter: *set - player.counter,
+                    ..Default::default()
+                },
+                req: PlayerStat::default(),
+            },
+            Element::Monster(monster) => monster.probe(player),
+            Element::Equipment(equip) => equip.probe(player),
+            Element::Inventory {
+                equip,
+                weapon,
+                shield,
+                accessory,
+            } => {
+                if *equip {
+                    EquipStat::reequip(player, *weapon, *shield, *accessory)
+                } else {
+                    EquipStat::unequip(player, *weapon, *shield, *accessory)
                 }
-
-                ProbeStat {
-                    diff,
-                    req: PlayerStat::default(),
-                }
-            } // TODO add support for percentage damage elements like hot tile, Aumtlich beams
-              // TODO add support for oremites
+            }
+            Element::HpBoost(boost) => boost.probe(player),
+            Element::Room(room) => room.probe(player),
         }
+    }
+}
+
+// Special ways room should be treated when visiting
+bitflags! {
+    pub struct RoomType: u8 {
+        const INTERMEDIATE      = 0b000001;   // Must leave through neighboring rooms
+        const ONLY_WHEN_FREE    = 0b000010;
+        const PRIORITY          = 0b000100;
+        const DELAYED           = 0b001000;
+        const REPEATED          = 0b010000;
+        const CLEAR_NEIGHBORS   = 0b100000;
     }
 }
 
 // Room contains a sequence of elements that must all be completed
 // #[derive(Debug)]
 pub struct Room {
-    pub(super) name: String,
-    content: Vec<RoomElement>,
-    pub(super) room_type: RoomType,
+    pub name: String,
+    pub content: Vec<Element>,
+    pub room_type: RoomType,
 }
 
 impl Room {
     // Test result of going through each element in order
-    pub(super) fn probe(&self, stat: &PlayerCombat) -> ProbeStat {
-        let mut player = PlayerStat::from(*stat);
+    pub fn probe(&self, player: &PlayerCombat) -> ProbeStat {
+        let mut stat = PlayerStat::from(*player);
         let mut res = ProbeStat::default();
         for element in &self.content {
-            let probe = element.probe(&player.into());
+            let probe = element.probe(&PlayerCombat::from(stat));
             res += probe;
-            player += probe.diff;
+            stat += probe.diff;
         }
         res
     }
@@ -741,7 +755,7 @@ impl Level {
             panic!(String::from("the room has aleady been added: ") + &room.name);
         }
         self.vertices_mask.insert(self.next_id as usize, 1, 1);
-        if room.room_type.contains(DRepeatedRoom) {
+        if room.room_type.contains(RoomType::REPEATED) {
             self.boundary_mask.insert(self.next_id as usize, 1, 1);
         }
         self.current_vertex_id = self.next_id;

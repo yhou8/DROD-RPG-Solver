@@ -429,6 +429,56 @@ impl EquipStat {
     }
 }
 
+pub struct HPBoostStat {
+    pub hp: i32,
+    pub flag: PlayerFlag,
+    pub atk: i16,
+    pub def: i16,
+    pub equip_flag: PlayerFlag,
+    pub equip_atk: i16,
+    pub equip_def: i16,
+    pub gr: i16,
+    pub yk: i8,
+    pub gk: i8,
+    pub bk: i8,
+    pub counter: i8,
+}
+
+impl HPBoostStat {
+    pub fn probe(&self, player: &PlayerCombat) -> ProbeStat {
+        let hp_diff = Self::percent_floor(self.hp, player.hp + 1)
+            + Self::percent_floor(self.atk, player.atk)
+            + Self::percent_floor(self.def, player.def)
+            + Self::percent_floor(self.equip_atk, player.equip_atk)
+            + Self::percent_floor(self.equip_def, player.equip_def);
+
+        let diff = PlayerStat {
+            hp: hp_diff,
+            ..Default::default()
+        };
+
+        if hp_diff >= 0 {
+            ProbeStat {
+                diff,
+                ..Default::default()
+            }
+        } else {
+            ProbeStat { diff, req: -diff }
+        }
+    }
+
+    fn percent_floor<T: Into<i32>>(scale: T, num: T) -> i32 {
+        let scale = scale.into();
+        let num = num.into();
+        let prod = scale * num;
+        if prod >= 0 {
+            prod / 100
+        } else {
+            (prod - 99) / 100
+        }
+    }
+}
+
 // Monster behavior that affect combat
 bitflags! {
     struct MonsterBehavior: u32 {

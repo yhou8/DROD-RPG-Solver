@@ -64,9 +64,7 @@ pub struct PlayerStat {
 
 impl From<PlayerStat> for PlayerObjective {
     fn from(stat: PlayerStat) -> Self {
-        Self {
-            hp: stat.hp,
-        }
+        Self { hp: stat.hp }
     }
 }
 
@@ -99,7 +97,7 @@ impl PlayerStat {
             && self.yk >= rhs.yk
             && self.gk >= rhs.gk
             && self.bk >= rhs.bk
-            // ignore counter
+        // ignore counter
     }
 
     pub fn nonnegative(&self) -> bool {
@@ -112,7 +110,7 @@ impl PlayerStat {
             && self.yk >= 0
             && self.gk >= 0
             && self.bk >= 0
-            // ignore counter
+        // ignore counter
     }
 
     // Find the maximum stats of two players
@@ -241,8 +239,11 @@ impl AddAssign<PlayerStat> for PlayerCombat {
 
 impl PlayerCombat {
     fn write(&self, writer: &mut dyn Write) {
-        writeln!(writer, "Combat, hp:{}, flag:{}, atk:{}, def:{}, equip_flag:{}, equip_atk:{}, equip_def:{}",
-            self.hp, self.flag, self.atk, self.def, self.equip_flag, self.equip_atk, self.equip_def);
+        writeln!(
+            writer,
+            "Combat, hp:{}, flag:{}, atk:{}, def:{}, equip_flag:{}, equip_atk:{}, equip_def:{}",
+            self.hp, self.flag, self.atk, self.def, self.equip_flag, self.equip_atk, self.equip_def
+        );
     }
 }
 
@@ -304,6 +305,130 @@ impl AddAssign for ProbeStat {
     }
 }
 
+#[derive(Default)]
+pub struct EquipStat {
+    pub equip_flag: PlayerFlag,
+    pub equip_atk: i16,
+    pub equip_def: i16,
+}
+
+impl EquipStat {
+    pub fn probe(&self, player: &PlayerCombat) -> ProbeStat {
+        if self.equip_atk > 0 && self.equip_atk > player.equip_atk {
+            let flag = (player.equip_flag & PlayerFlag::WEAPON_MASK) ^ self.equip_flag;
+            let diff = PlayerStat {
+                flag,
+                atk: self.equip_atk - player.equip_atk,
+                equip_flag: flag,
+                equip_atk: self.equip_atk - player.equip_atk,
+                ..Default::default()
+            };
+
+            ProbeStat {
+                diff,
+                ..Default::default()
+            }
+        } else if self.equip_def > 0 && self.equip_def > player.equip_def {
+            let flag = (player.equip_flag & PlayerFlag::SHIELD_MASK) ^ self.equip_flag;
+            let diff = PlayerStat {
+                flag,
+                def: self.equip_def - player.equip_def,
+                equip_flag: flag,
+                equip_def: self.equip_def - player.equip_def,
+                ..Default::default()
+            };
+
+            ProbeStat {
+                diff,
+                ..Default::default()
+            }
+        } else if self.equip_flag.is_empty() {
+            let flag = (player.equip_flag & PlayerFlag::ACCESSORY_MASK) ^ self.equip_flag;
+            let diff = PlayerStat {
+                flag,
+                equip_flag: flag,
+                ..Default::default()
+            };
+
+            ProbeStat {
+                diff,
+                ..Default::default()
+            }
+        } else {
+            ProbeStat::default()
+        }
+    }
+
+    // TODO move these to PlayerCombat?
+    pub fn unequip(
+        player: &PlayerCombat,
+        weapon: bool,
+        shield: bool,
+        accessory: bool,
+    ) -> ProbeStat {
+        let flag = PlayerFlag::empty();
+        let atk = 0;
+        let def = 0;
+        if weapon {
+            flag |= player.equip_flag & PlayerFlag::WEAPON_MASK;
+            atk = -player.equip_atk;
+        }
+        if shield {
+            flag |= player.equip_flag & PlayerFlag::SHIELD_MASK;
+            def = -player.equip_def;
+        }
+        if accessory {
+            flag |= player.equip_flag & PlayerFlag::ACCESSORY_MASK;
+        }
+
+        let diff = PlayerStat {
+            flag,
+            atk,
+            def,
+            ..Default::default()
+        };
+
+        ProbeStat {
+            diff,
+            ..Default::default()
+        }
+    }
+
+    pub fn reequip(
+        player: &PlayerCombat,
+        weapon: bool,
+        shield: bool,
+        accessory: bool,
+    ) -> ProbeStat {
+        let flag = PlayerFlag::empty();
+        let atk = 0;
+        let def = 0;
+        if weapon {
+            flag |= player.equip_flag & PlayerFlag::WEAPON_MASK;
+            atk = player.equip_atk;
+        }
+        if shield {
+            flag |= player.equip_flag & PlayerFlag::SHIELD_MASK;
+            def = player.equip_def;
+        }
+        if accessory {
+            flag |= player.equip_flag & PlayerFlag::ACCESSORY_MASK;
+        }
+
+        let diff = PlayerStat {
+            flag,
+            atk,
+            def,
+            ..Default::default()
+        };
+
+        ProbeStat {
+            diff,
+            ..Default::default()
+        }
+    }
+}
+
 // Monster behavior that affect combat
 bitflags! {
     struct MonsterBehavior: u32 {
@@ -335,13 +460,9 @@ struct Monster {
 impl Monster {
     // Results of fighting a monster
     fn probe(&self, stat: &PlayerCombat) -> ProbeStat {
-        let player_atk = if stat
-            .flag
-            .contains(PlayerFlag::DOUBLE_ATK_AGAINST_GOBLIN)
+        let player_atk = if stat.flag.contains(PlayerFlag::DOUBLE_ATK_AGAINST_GOBLIN)
             && self.behavior.contains(MonsterBehavior::GOBLIN_WEAKNESS)
-            || stat
-                .flag
-                .contains(PlayerFlag::DOUBLE_ATK_AGAINST_WYRM)
+            || stat.flag.contains(PlayerFlag::DOUBLE_ATK_AGAINST_WYRM)
                 && self.behavior.contains(MonsterBehavior::WYRM_WEAKNESS)
         {
             stat.atk * 2
@@ -415,10 +536,7 @@ impl Monster {
 
         let gr_gain = if self.behavior.contains(MonsterBehavior::ONE_HIT) {
             0
-        } else if stat
-            .flag
-            .contains(PlayerFlag::DOUBLE_GR_WEAPON)
-        {
+        } else if stat.flag.contains(PlayerFlag::DOUBLE_GR_WEAPON) {
             self.gr * 2
         } else {
             self.gr
@@ -437,7 +555,7 @@ impl Monster {
         let mut req = PlayerStat::default();
         req.hp = damage;
 
-        ProbeStat { diff, req, }
+        ProbeStat { diff, req }
     }
 }
 
@@ -453,11 +571,11 @@ bitflags! {
 // Types of elements in a room
 // #[derive(Debug)]
 enum RoomElement {
-    Resource(PlayerStat),  // Gives player stats
-    Cost(PlayerStat),      // Removes player stats
+    Resource(PlayerStat),    // Gives player stats
+    Cost(PlayerStat),        // Removes player stats
     Requirement(PlayerStat), // Requires certain stats to fight
-    Monster(Monster),    // Fight monster to pass
-    Equipment(PlayerStat), // Gives player equipment, replaces old equipment
+    Monster(Monster),        // Fight monster to pass
+    Equipment(PlayerStat),   // Gives player equipment, replaces old equipment
 }
 
 impl RoomElement {
@@ -575,13 +693,13 @@ impl Level {
             panic!(String::from("the room has aleady been added: ") + &room.name);
         }
         self.vertices_mask.insert(self.next_id as usize, 1, 1);
-        // if room.room_type.is_empty() {
         if room.room_type.contains(DRepeatedRoom) {
             self.boundary_mask.insert(self.next_id as usize, 1, 1);
         }
         self.current_vertex_id = self.next_id;
         self.next_id += 1;
-        self.name2id.insert(room.name.clone(), self.current_vertex_id);
+        self.name2id
+            .insert(room.name.clone(), self.current_vertex_id);
         self.vertices.push(room);
         self.neighbors.push(BitSet::new());
         self.toggle_neighbors.push(BitSet::new());

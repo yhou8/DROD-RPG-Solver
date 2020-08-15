@@ -4,6 +4,7 @@ use std::io::Write;
 use std::ops::{Add, AddAssign, Neg, Sub};
 use std::u8;
 
+use rust_dense_bitset::BitSet as _;
 use rust_dense_bitset::DenseBitSet as BitSet;
 
 // Ways that equipment affect the player
@@ -43,6 +44,10 @@ impl Display for PlayerFlag {
     }
 }
 
+pub trait Ge<RHS = Self> {
+    fn ge(&self, other: &Self) -> bool;
+}
+
 // Player stats
 // HP is shifted by 1 so that 0 is considered alive.
 // This change makes code cleaner.
@@ -59,7 +64,7 @@ pub struct PlayerStat {
     pub yk: i8,
     pub gk: i8,
     pub bk: i8,
-    pub counter: i8,
+    pub counter: i8, // ignore
 }
 
 impl From<PlayerStat> for PlayerObjective {
@@ -84,22 +89,24 @@ impl From<PlayerStat> for PlayerCombat {
     }
 }
 
-impl PlayerStat {
-    pub fn ge(&self, rhs: &Self) -> bool {
-        self.hp >= rhs.hp
-            && self.flag.contains(rhs.flag)
-            && self.atk >= rhs.atk
-            && self.def >= rhs.def
-            && self.equip_flag.contains(rhs.equip_flag)
-            && self.equip_atk >= rhs.equip_atk
-            && self.equip_def >= rhs.equip_def
-            && self.gr >= rhs.gr
-            && self.yk >= rhs.yk
-            && self.gk >= rhs.gk
-            && self.bk >= rhs.bk
+impl Ge for PlayerStat {
+    fn ge(&self, other: &Self) -> bool {
+        self.hp >= other.hp
+            && self.flag.contains(other.flag)
+            && self.atk >= other.atk
+            && self.def >= other.def
+            && self.equip_flag.contains(other.equip_flag)
+            && self.equip_atk >= other.equip_atk
+            && self.equip_def >= other.equip_def
+            && self.gr >= other.gr
+            && self.yk >= other.yk
+            && self.gk >= other.gk
+            && self.bk >= other.bk
         // ignore counter
     }
+}
 
+impl PlayerStat {
     pub fn nonnegative(&self) -> bool {
         self.hp >= 0
             && self.atk >= 0
@@ -114,35 +121,35 @@ impl PlayerStat {
     }
 
     // Find the maximum stats of two players
-    pub fn join(&mut self, rhs: Self) {
-        self.hp = self.hp.max(rhs.hp);
-        self.flag |= rhs.flag;
-        self.atk = self.atk.max(rhs.atk);
-        self.def = self.def.max(rhs.def);
-        self.equip_flag |= rhs.equip_flag;
-        self.equip_atk = self.equip_atk.max(rhs.equip_atk);
-        self.equip_def = self.equip_def.max(rhs.equip_def);
-        self.gr = self.gr.max(rhs.gr);
-        self.yk = self.yk.max(rhs.yk);
-        self.gk = self.gk.max(rhs.gk);
-        self.bk = self.bk.max(rhs.bk);
+    pub fn join(&mut self, other: Self) {
+        self.hp = self.hp.max(other.hp);
+        self.flag |= other.flag;
+        self.atk = self.atk.max(other.atk);
+        self.def = self.def.max(other.def);
+        self.equip_flag |= other.equip_flag;
+        self.equip_atk = self.equip_atk.max(other.equip_atk);
+        self.equip_def = self.equip_def.max(other.equip_def);
+        self.gr = self.gr.max(other.gr);
+        self.yk = self.yk.max(other.yk);
+        self.gk = self.gk.max(other.gk);
+        self.bk = self.bk.max(other.bk);
         // ignore counter
     }
 }
 
 impl AddAssign for PlayerStat {
-    fn add_assign(&mut self, rhs: PlayerStat) {
-        self.hp += rhs.hp;
-        self.flag ^= rhs.flag;
-        self.atk += rhs.atk;
-        self.def += rhs.def;
-        self.equip_flag ^= rhs.equip_flag;
-        self.equip_atk += rhs.equip_atk;
-        self.equip_def += rhs.equip_def;
-        self.gr += rhs.gr;
-        self.yk += rhs.yk;
-        self.gk += rhs.gk;
-        self.bk += rhs.bk;
+    fn add_assign(&mut self, other: PlayerStat) {
+        self.hp += other.hp;
+        self.flag ^= other.flag;
+        self.atk += other.atk;
+        self.def += other.def;
+        self.equip_flag ^= other.equip_flag;
+        self.equip_atk += other.equip_atk;
+        self.equip_def += other.equip_def;
+        self.gr += other.gr;
+        self.yk += other.yk;
+        self.gk += other.gk;
+        self.bk += other.bk;
         // ignore counter
     }
 }
@@ -193,25 +200,23 @@ impl Neg for PlayerStat {
 
 #[derive(Default)]
 pub struct LevelStat {
-    pub counter: i8,
+    pub counter: i8, // ignore
 }
 
-#[derive(Clone, Copy, Default, Eq, PartialEq)]
+#[derive(Clone, Copy, Default, Eq, Hash, PartialEq)]
 pub struct PlayerCombat {
-    pub hp: i32,
     pub flag: PlayerFlag,
     pub atk: i16,
     pub def: i16,
     pub equip_flag: PlayerFlag,
     pub equip_atk: i16,
     pub equip_def: i16,
-    pub counter: i8,
+    pub counter: i8, // ignore
 }
 
 impl From<PlayerCombat> for PlayerStat {
     fn from(combat: PlayerCombat) -> Self {
         Self {
-            hp: combat.hp,
             flag: combat.flag,
             atk: combat.atk,
             def: combat.def,
@@ -225,26 +230,24 @@ impl From<PlayerCombat> for PlayerStat {
 }
 
 impl AddAssign<PlayerStat> for PlayerCombat {
-    fn add_assign(&mut self, rhs: PlayerStat) {
-        self.hp += rhs.hp;
-        self.flag ^= rhs.flag;
-        self.atk += rhs.atk;
-        self.def += rhs.def;
-        self.equip_flag ^= rhs.equip_flag;
-        self.equip_atk += rhs.equip_atk;
-        self.equip_def += rhs.equip_def;
+    fn add_assign(&mut self, other: PlayerStat) {
+        self.flag ^= other.flag;
+        self.atk += other.atk;
+        self.def += other.def;
+        self.equip_flag ^= other.equip_flag;
+        self.equip_atk += other.equip_atk;
+        self.equip_def += other.equip_def;
         // ignore counter
     }
 }
 
-impl PlayerCombat {
-    fn write(&self, writer: &mut dyn Write) {
+impl Display for PlayerCombat {
+    fn fmt(&self, f: &mut Formatter<'_>) -> Result {
         writeln!(
-            writer,
-            "Combat, hp:{}, flag:{}, atk:{}, def:{}, equip_flag:{}, equip_atk:{}, equip_def:{}",
-            self.hp, self.flag, self.atk, self.def, self.equip_flag, self.equip_atk, self.equip_def
+            f,
+            "Combat, flag:{}, atk:{}, def:{}, equip_flag:{}, equip_atk:{}, equip_def:{}",
+            self.flag, self.atk, self.def, self.equip_flag, self.equip_atk, self.equip_def
         )
-        .expect("error writing PlayerCombat");
     }
 }
 
@@ -256,16 +259,16 @@ pub struct PlayerObjective {
 impl Add for PlayerObjective {
     type Output = Self;
 
-    fn add(self, rhs: Self) -> Self {
+    fn add(self, other: Self) -> Self {
         Self {
-            hp: self.hp + rhs.hp,
+            hp: self.hp + other.hp,
         }
     }
 }
 
-impl PlayerObjective {
-    fn ge(&self, rhs: &Self) -> bool {
-        self.hp >= rhs.hp
+impl Ge for PlayerObjective {
+    fn ge(&self, other: &Self) -> bool {
+        self.hp >= other.hp
     }
 }
 
@@ -274,12 +277,14 @@ pub struct PlayerScore {
     pub score: i32,
 }
 
-impl PlayerScore {
-    fn ge(&self, rhs: &Self) -> bool {
-        self.score >= rhs.score
+impl Ge for PlayerScore {
+    fn ge(&self, other: &Self) -> bool {
+        self.score >= other.score
     }
+}
 
-    fn write(&self, writer: &mut dyn Write) {
+impl PlayerScore {
+    fn print(&self, writer: &mut dyn Write) {
         let mut score_str = (self.score / 1000).to_string() + ".";
         if self.score % 1000 < 100 {
             score_str += "0";
@@ -300,9 +305,9 @@ pub struct ProbeStat {
 }
 
 impl AddAssign for ProbeStat {
-    fn add_assign(&mut self, rhs: Self) {
-        self.req.join(rhs.req - self.diff);
-        self.diff += rhs.diff;
+    fn add_assign(&mut self, other: Self) {
+        self.req.join(other.req - self.diff);
+        self.diff += other.diff;
     }
 }
 
@@ -442,7 +447,7 @@ pub struct HpBoostStat {
     pub yk: i8,
     pub gk: i8,
     pub bk: i8,
-    pub counter: i8,
+    pub counter: i8, // ignore
 }
 
 impl HpBoostStat {
@@ -705,21 +710,23 @@ impl Room {
     }
 }
 
+type VertexIDType = u8;
+
 // TODO split into builder
 // Represent level as a graph of rooms
 // #[derive(Debug)]
 pub struct Level {
-    pub next_id: u8,
+    pub next_id: VertexIDType,
     pub vertices_mask: BitSet,
     pub boundary_mask: BitSet,
     pub neighbors: Vec<BitSet>,
     pub toggle_neighbors: Vec<BitSet>,
     pub use_edge: bool,
-    pub entrance: u8,
-    pub exit: u8,
+    pub entrance: VertexIDType,
+    pub exit: VertexIDType,
 
-    current_vertex_id: u8,
-    name2id: HashMap<String, u8>,
+    current_vertex_id: VertexIDType,
+    name2id: HashMap<String, VertexIDType>,
     vertices: Vec<Room>,
 }
 
@@ -740,7 +747,7 @@ impl Level {
         }
     }
 
-    pub fn select_id(&mut self, id: u8) -> &mut Self {
+    pub fn select_id(&mut self, id: VertexIDType) -> &mut Self {
         self.current_vertex_id = id;
         self
     }
@@ -754,9 +761,9 @@ impl Level {
             // TODO improve error reporting
             panic!(String::from("the room has aleady been added: ") + &room.name);
         }
-        self.vertices_mask.insert(self.next_id as usize, 1, 1);
+        self.vertices_mask.set_bit(self.next_id as usize, true);
         if room.room_type.contains(RoomType::REPEATED) {
-            self.boundary_mask.insert(self.next_id as usize, 1, 1);
+            self.boundary_mask.set_bit(self.next_id as usize, true);
         }
         self.current_vertex_id = self.next_id;
         self.next_id += 1;
@@ -768,14 +775,14 @@ impl Level {
         self
     }
 
-    pub fn add_arc(&mut self, id0: u8, id1: u8) -> &mut Self {
+    pub fn add_arc(&mut self, id0: VertexIDType, id1: VertexIDType) -> &mut Self {
         if id0 < self.next_id && id1 < self.next_id {
-            self.neighbors[id0 as usize].insert(id1 as usize, 1, 1)
+            self.neighbors[id0 as usize].set_bit(id1 as usize, true)
         }
         self
     }
 
-    pub fn add_id(&mut self, id: u8) -> &mut Self {
+    pub fn add_id(&mut self, id: VertexIDType) -> &mut Self {
         let id0 = self.current_vertex_id;
         let id1 = self.select_id(id).current_vertex_id;
         if self.use_edge {
@@ -797,9 +804,9 @@ impl Level {
         self.add_arc(id0, id1)
     }
 
-    pub fn toggle(&mut self, id0: u8, id1: u8) -> &mut Self {
+    pub fn toggle(&mut self, id0: VertexIDType, id1: VertexIDType) -> &mut Self {
         if id0 < self.next_id && id1 < self.next_id {
-            self.toggle_neighbors[id0 as usize].insert(id1 as usize, 1, 1)
+            self.toggle_neighbors[id0 as usize].set_bit(id1 as usize, true)
         }
         self
     }
@@ -808,7 +815,7 @@ impl Level {
         self.toggle(self.id(name0), self.id(name1))
     }
 
-    pub fn id(&self, name: &str) -> u8 {
+    pub fn id(&self, name: &str) -> VertexIDType {
         let id = self.name2id.get(name);
         *id.expect(&(String::from("cannot find vertex with given name: ") + name))
     }
@@ -822,7 +829,7 @@ impl Level {
         &self.vertices[self.current_vertex_id as usize]
     }
 
-    pub fn vertex_of_id(&self, id: u8) -> &Room {
+    pub fn vertex_of_id(&self, id: VertexIDType) -> &Room {
         &self.vertices[id as usize]
     }
 
@@ -835,7 +842,7 @@ impl Level {
         self
     }
 
-    pub fn set_entrance_id(&mut self, id: u8) -> &mut Self {
+    pub fn set_entrance_id(&mut self, id: VertexIDType) -> &mut Self {
         self.entrance = id;
         self
     }
@@ -849,7 +856,7 @@ impl Level {
         self
     }
 
-    pub fn set_exit_id(&mut self, id: u8) -> &mut Self {
+    pub fn set_exit_id(&mut self, id: VertexIDType) -> &mut Self {
         self.exit = id;
         self
     }
@@ -857,4 +864,8 @@ impl Level {
     pub fn set_exit_name(&mut self, name: &str) -> &mut Self {
         self.set_exit_id(self.id(name))
     }
+}
+
+pub struct LevelInfo {
+    pub max_config_numner: i32,
 }

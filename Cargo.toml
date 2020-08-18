@@ -9,3 +9,6 @@ edition = "2018"
 [dependencies]
 bitflags = "1.0"
 rust-dense-bitset = "0.1.1"
+
+[features]
+closed-level = []

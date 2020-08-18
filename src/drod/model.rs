@@ -272,11 +272,6 @@ impl Ge for PlayerObjective {
     }
 }
 
-#[derive(Default)]
-pub struct PlayerScore {
-    pub score: i32,
-}
-
 impl Ge for PlayerScore {
     fn ge(&self, other: &Self) -> bool {
         self.score >= other.score
@@ -709,8 +704,6 @@ impl Room {
         res
     }
 }
-
-type VertexIDType = u8;
 
 // TODO split into builder
 // Represent level as a graph of rooms

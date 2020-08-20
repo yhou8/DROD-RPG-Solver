@@ -1,16 +1,23 @@
-use std::collections::HashMap;
-use std::fmt::{Display, Formatter, Result};
-use std::io::Write;
-use std::ops::{Add, AddAssign, Neg, Sub};
-use std::u8;
-
-use rust_dense_bitset::BitSet as _;
+// use rust_dense_bitset::BitSet as _;
 use rust_dense_bitset::DenseBitSet as BitSet;
 
-// Ways that equipment affect the player
+use std::collections::HashMap;
+// use std::fmt;
+// use std::fmt::{Display, Formatter};
+// use std::io::Write;
+use std::ops::{Add, AddAssign, Neg, Sub};
+// use std::u8;
+
+type VertexIDType = u8;
+
+// trait Ge {
+//     fn ge(&self, other: &Self) -> bool;
+// }
+
+// Character behaviors that affect gameplay
 bitflags! {
     #[derive(Default)]
-    pub struct PlayerFlag: u8 {
+    struct PlayerFlag: u8 {
         const DEAD                      = 0b00001;
         const HAS_WEAPON                = 0b00010;
         const DOUBLE_GR_WEAPON          = 0b00100;
@@ -22,156 +29,250 @@ bitflags! {
     }
 }
 
-impl Display for PlayerFlag {
-    fn fmt(&self, f: &mut Formatter<'_>) -> Result {
-        let mut flag_str = String::new();
-        if self.contains(PlayerFlag::DEAD) {
-            flag_str += " DEAD";
-        }
-        if self.contains(PlayerFlag::HAS_WEAPON) {
-            flag_str += " HAS_WEAPON";
-        }
-        if self.contains(PlayerFlag::DOUBLE_GR_WEAPON) {
-            flag_str += " DOUBLE_GR_WEAPON";
-        }
-        if self.contains(PlayerFlag::DOUBLE_ATK_AGAINST_GOBLIN) {
-            flag_str += " DOUBLE_ATK_AGAINST_GOBLIN";
-        }
-        if self.contains(PlayerFlag::DOUBLE_ATK_AGAINST_WYRM) {
-            flag_str += " DOUBLE_ATK_AGAINST_WYRM";
-        }
-        write!(f, "{}", flag_str)
-    }
+// impl Display for PlayerFlag {
+//     fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
+//         let dead = if self.contains(PlayerFlag::DEAD) {
+//             " DEAD"
+//         } else {
+//             ""
+//         };
+//         let has_weapon = if self.contains(PlayerFlag::HAS_WEAPON) {
+//             " HAS_WEAPON"
+//         } else {
+//             ""
+//         };
+//         let double_gr = if self.contains(PlayerFlag::DOUBLE_GR_WEAPON) {
+//             " DOUBLE_GR_WEAPON"
+//         } else {
+//             ""
+//         };
+//         let double_goblin = if self.contains(PlayerFlag::DOUBLE_ATK_AGAINST_GOBLIN) {
+//             " DOUBLE_ATK_AGAINST_GOBLIN"
+//         } else {
+//             ""
+//         };
+//         let double_wyrm = if self.contains(PlayerFlag::DOUBLE_ATK_AGAINST_WYRM) {
+//             " DOUBLE_ATK_AGAINST_WYRM"
+//         } else {
+//             ""
+//         };
+//         write!(
+//             f,
+//             "{}{}{}{}{}",
+//             dead, has_weapon, double_gr, double_goblin, double_wyrm
+//         )
+//     }
+// }
+
+#[derive(Clone, Default)]
+struct EquipStat {
+    flag: PlayerFlag,
+    atk: i16,
+    def: i16,
 }
 
-pub trait Ge<RHS = Self> {
-    fn ge(&self, other: &Self) -> bool;
-}
+impl EquipStat {
+    // fn nonnegative(&self) -> bool {
+    //     self.atk >= 0 && self.def >= 0
+    // }
 
-// Player stats
-// HP is shifted by 1 so that 0 is considered alive.
-// This change makes code cleaner.
-#[derive(Clone, Copy, Default)]
-pub struct PlayerStat {
-    pub hp: i32,
-    pub flag: PlayerFlag,
-    pub atk: i16,
-    pub def: i16,
-    pub equip_flag: PlayerFlag,
-    pub equip_atk: i16,
-    pub equip_def: i16,
-    pub gr: i16,
-    pub yk: i8,
-    pub gk: i8,
-    pub bk: i8,
-    pub counter: i8, // ignore
-}
-
-impl From<PlayerStat> for PlayerObjective {
-    fn from(stat: PlayerStat) -> Self {
-        Self { hp: stat.hp }
-    }
-}
-
-impl From<PlayerStat> for PlayerCombat {
-    fn from(stat: PlayerStat) -> Self {
-        Self {
-            hp: stat.hp,
-            flag: stat.flag,
-            atk: stat.atk,
-            def: stat.def,
-            equip_flag: stat.equip_flag,
-            equip_atk: stat.equip_atk,
-            equip_def: stat.equip_def,
-            // default counter
-            ..Default::default()
-        }
-    }
-}
-
-impl Ge for PlayerStat {
-    fn ge(&self, other: &Self) -> bool {
-        self.hp >= other.hp
-            && self.flag.contains(other.flag)
-            && self.atk >= other.atk
-            && self.def >= other.def
-            && self.equip_flag.contains(other.equip_flag)
-            && self.equip_atk >= other.equip_atk
-            && self.equip_def >= other.equip_def
-            && self.gr >= other.gr
-            && self.yk >= other.yk
-            && self.gk >= other.gk
-            && self.bk >= other.bk
-        // ignore counter
-    }
-}
-
-impl PlayerStat {
-    pub fn nonnegative(&self) -> bool {
-        self.hp >= 0
-            && self.atk >= 0
-            && self.def >= 0
-            && self.equip_atk >= 0
-            && self.equip_def >= 0
-            && self.gr >= 0
-            && self.yk >= 0
-            && self.gk >= 0
-            && self.bk >= 0
-        // ignore counter
-    }
-
-    // Find the maximum stats of two players
-    pub fn join(&mut self, other: Self) {
-        self.hp = self.hp.max(other.hp);
+    fn join(&mut self, other: Self) {
         self.flag |= other.flag;
         self.atk = self.atk.max(other.atk);
         self.def = self.def.max(other.def);
-        self.equip_flag |= other.equip_flag;
-        self.equip_atk = self.equip_atk.max(other.equip_atk);
-        self.equip_def = self.equip_def.max(other.equip_def);
+    }
+}
+
+// impl Ge for EquipStat {
+//     fn ge(&self, other: &Self) -> bool {
+//         self.flag.contains(other.flag) && self.atk >= other.atk && self.def >= other.def
+//     }
+// }
+
+impl AddAssign<&Self> for EquipStat {
+    fn add_assign(&mut self, other: &Self) {
+        self.flag ^= other.flag;
+        self.atk += other.atk;
+        self.def += other.def;
+    }
+}
+
+impl Sub for &EquipStat {
+    type Output = EquipStat;
+
+    fn sub(self, other: Self) -> EquipStat {
+        EquipStat {
+            flag: self.flag ^ other.flag,
+            atk: self.atk - other.atk,
+            def: self.def - other.def,
+        }
+    }
+}
+
+impl Neg for EquipStat {
+    type Output = Self;
+
+    fn neg(self) -> Self {
+        Self {
+            flag: self.flag,
+            atk: -self.atk,
+            def: -self.def,
+        }
+    }
+}
+
+// impl Display for EquipStat {
+//     fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
+//         write!(
+//             f,
+//             "equip_flag: {}, equip_atk: {}, equip_def: {}",
+//             self.flag, self.atk, self.def
+//         )
+//     }
+// }
+
+// Player stats that affect combat
+#[derive(Clone, Default)]
+struct PlayerCombat {
+    flag: PlayerFlag,
+    atk: i16,
+    def: i16,
+    equip: EquipStat,
+}
+
+impl PlayerCombat {
+    // fn nonnegative(&self) -> bool {
+    //     self.atk >= 0 && self.def >= 0 && self.equip.nonnegative()
+    // }
+
+    fn join(&mut self, other: Self) {
+        self.flag |= other.flag;
+        self.atk = self.atk.max(other.atk);
+        self.def = self.def.max(other.def);
+        self.equip.join(other.equip);
+    }
+}
+
+// impl Ge for PlayerCombat {
+//     fn ge(&self, other: &Self) -> bool {
+//         self.flag.contains(other.flag)
+//             && self.atk >= other.atk
+//             && self.def >= other.def
+//             && self.equip.ge(&other.equip)
+//     }
+// }
+
+impl AddAssign<&Self> for PlayerCombat {
+    fn add_assign(&mut self, other: &Self) {
+        self.flag ^= other.flag;
+        self.atk += other.atk;
+        self.def += other.def;
+        self.equip += &other.equip;
+    }
+}
+
+impl Sub for &PlayerCombat {
+    type Output = PlayerCombat;
+
+    fn sub(self, other: Self) -> PlayerCombat {
+        PlayerCombat {
+            flag: self.flag ^ other.flag,
+            atk: self.atk - other.atk,
+            def: self.def - other.def,
+            equip: &self.equip - &other.equip,
+        }
+    }
+}
+
+impl Neg for PlayerCombat {
+    type Output = Self;
+
+    fn neg(self) -> Self {
+        Self {
+            flag: self.flag,
+            atk: -self.atk,
+            def: -self.def,
+            equip: -self.equip,
+        }
+    }
+}
+
+// impl Display for PlayerCombat {
+//     fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
+//         writeln!(
+//             f,
+//             "Combat, flag: {}, atk: {}, def: {}, {}",
+//             self.flag, self.atk, self.def, self.equip
+//         )
+//     }
+// }
+
+// HP is shifted by 1 so that 0 is considered alive.
+// This change makes code cleaner.
+#[derive(Clone, Default)]
+struct PlayerStat {
+    hp: i32,
+    combat: PlayerCombat,
+    gr: i16,
+    yk: i8,
+    gk: i8,
+    bk: i8,
+}
+
+impl PlayerStat {
+    // fn nonnegative(&self) -> bool {
+    //     self.hp >= 0
+    //         && self.combat.nonnegative()
+    //         && self.gr >= 0
+    //         && self.yk >= 0
+    //         && self.gk >= 0
+    //         && self.bk >= 0
+    // }
+
+    // Find max of two player stats
+    fn join(&mut self, other: Self) {
+        self.hp = self.hp.max(other.hp);
+        self.combat.join(other.combat);
         self.gr = self.gr.max(other.gr);
         self.yk = self.yk.max(other.yk);
         self.gk = self.gk.max(other.gk);
         self.bk = self.bk.max(other.bk);
-        // ignore counter
     }
 }
 
-impl AddAssign for PlayerStat {
-    fn add_assign(&mut self, other: PlayerStat) {
+// impl Ge for PlayerStat {
+//     fn ge(&self, other: &Self) -> bool {
+//         self.hp >= other.hp
+//             && self.combat.ge(&other.combat)
+//             && self.gr >= other.gr
+//             && self.yk >= other.yk
+//             && self.gk >= other.gk
+//             && self.bk >= other.bk
+//     }
+// }
+
+impl AddAssign<&Self> for PlayerStat {
+    fn add_assign(&mut self, other: &Self) {
         self.hp += other.hp;
-        self.flag ^= other.flag;
-        self.atk += other.atk;
-        self.def += other.def;
-        self.equip_flag ^= other.equip_flag;
-        self.equip_atk += other.equip_atk;
-        self.equip_def += other.equip_def;
+        self.combat += &other.combat;
         self.gr += other.gr;
         self.yk += other.yk;
         self.gk += other.gk;
         self.bk += other.bk;
-        // ignore counter
     }
 }
 
-impl Sub for PlayerStat {
-    type Output = Self;
+impl Sub for &PlayerStat {
+    type Output = PlayerStat;
 
-    fn sub(self, other: PlayerStat) -> Self {
-        Self {
+    fn sub(self, other: Self) -> PlayerStat {
+        PlayerStat {
             hp: self.hp - other.hp,
-            flag: self.flag ^ other.flag,
-            atk: self.atk - other.atk,
-            def: self.def - other.def,
-            equip_flag: self.equip_flag ^ other.equip_flag,
-            equip_atk: self.equip_atk - other.equip_atk,
-            equip_def: self.equip_def - other.equip_def,
+            combat: &self.combat - &other.combat,
             gr: self.gr - other.gr,
             yk: self.yk - other.yk,
             gk: self.gk - other.gk,
             bk: self.bk - other.bk,
-            // default counter
-            ..Default::default()
         }
     }
 }
@@ -182,175 +283,138 @@ impl Neg for PlayerStat {
     fn neg(self) -> Self {
         Self {
             hp: -self.hp,
-            flag: self.flag,
-            atk: -self.atk,
-            def: -self.def,
-            equip_flag: self.equip_flag,
-            equip_atk: -self.equip_atk,
-            equip_def: -self.equip_def,
+            combat: -self.combat,
             gr: -self.gr,
             yk: -self.yk,
             gk: -self.gk,
             bk: -self.bk,
-            // default counter
-            ..Default::default()
         }
     }
 }
 
-#[derive(Default)]
-pub struct LevelStat {
-    pub counter: i8, // ignore
+// #[derive(Eq, PartialEq)]
+struct PlayerObjective {
+    hp: i32,
 }
 
-#[derive(Clone, Copy, Default, Eq, Hash, PartialEq)]
-pub struct PlayerCombat {
-    pub flag: PlayerFlag,
-    pub atk: i16,
-    pub def: i16,
-    pub equip_flag: PlayerFlag,
-    pub equip_atk: i16,
-    pub equip_def: i16,
-    pub counter: i8, // ignore
+// impl Add for PlayerObjective {
+//     type Output = Self;
+
+//     fn add(self, other: Self) -> Self {
+//         Self {
+//             hp: self.hp + other.hp,
+//         }
+//     }
+// }
+
+// impl Ge for PlayerObjective {
+//     fn ge(&self, other: &Self) -> bool {
+//         self.hp >= other.hp
+//     }
+// }
+
+struct PlayerScore {
+    score: i32,
 }
 
-impl From<PlayerCombat> for PlayerStat {
-    fn from(combat: PlayerCombat) -> Self {
-        Self {
-            flag: combat.flag,
-            atk: combat.atk,
-            def: combat.def,
-            equip_flag: combat.equip_flag,
-            equip_atk: combat.equip_atk,
-            equip_def: combat.equip_def,
-            // default including counter
-            ..Default::default()
-        }
+// impl Ge for PlayerScore {
+//     fn ge(&self, other: &Self) -> bool {
+//         self.score >= other.score
+//     }
+// }
+
+// impl Display for PlayerScore {
+//     fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
+//         let score_modk = self.score % 1000;
+//         let tenth = if score_modk < 100 { "0" } else { "" };
+//         let hundredth = if score_modk < 10 { "0" } else { "" };
+//         write!(
+//             f,
+//             "{}.{}{}{}",
+//             self.score / 1000,
+//             tenth,
+//             hundredth,
+//             score_modk
+//         )
+//     }
+// }
+
+// Result of completing a room element
+#[derive(Clone, Default)]
+struct ProbeStat {
+    diff: PlayerStat,
+    req: PlayerStat,
+}
+
+impl AddAssign<&Self> for ProbeStat {
+    fn add_assign(&mut self, other: &Self) {
+        self.req.join(&other.req - &self.diff);
+        self.diff += &other.diff;
     }
-}
-
-impl AddAssign<PlayerStat> for PlayerCombat {
-    fn add_assign(&mut self, other: PlayerStat) {
-        self.flag ^= other.flag;
-        self.atk += other.atk;
-        self.def += other.def;
-        self.equip_flag ^= other.equip_flag;
-        self.equip_atk += other.equip_atk;
-        self.equip_def += other.equip_def;
-        // ignore counter
-    }
-}
-
-impl Display for PlayerCombat {
-    fn fmt(&self, f: &mut Formatter<'_>) -> Result {
-        writeln!(
-            f,
-            "Combat, flag:{}, atk:{}, def:{}, equip_flag:{}, equip_atk:{}, equip_def:{}",
-            self.flag, self.atk, self.def, self.equip_flag, self.equip_atk, self.equip_def
-        )
-    }
-}
-
-#[derive(Default, Eq, PartialEq)]
-pub struct PlayerObjective {
-    pub hp: i32,
-}
-
-impl Add for PlayerObjective {
-    type Output = Self;
-
-    fn add(self, other: Self) -> Self {
-        Self {
-            hp: self.hp + other.hp,
-        }
-    }
-}
-
-impl Ge for PlayerObjective {
-    fn ge(&self, other: &Self) -> bool {
-        self.hp >= other.hp
-    }
-}
-
-impl Ge for PlayerScore {
-    fn ge(&self, other: &Self) -> bool {
-        self.score >= other.score
-    }
-}
-
-impl PlayerScore {
-    fn print(&self, writer: &mut dyn Write) {
-        let mut score_str = (self.score / 1000).to_string() + ".";
-        if self.score % 1000 < 100 {
-            score_str += "0";
-        }
-        if self.score % 1000 < 10 {
-            score_str += "0";
-        }
-        score_str += &(self.score % 1000).to_string();
-        write!(writer, "{}", score_str).expect("error writing PlayerScore");
-    }
-}
-
-// Results of completing a room element
-#[derive(Clone, Copy, Default)]
-pub struct ProbeStat {
-    pub diff: PlayerStat,
-    pub req: PlayerStat,
-}
-
-impl AddAssign for ProbeStat {
-    fn add_assign(&mut self, other: Self) {
-        self.req.join(other.req - self.diff);
-        self.diff += other.diff;
-    }
-}
-
-#[derive(Default)]
-pub struct EquipStat {
-    pub equip_flag: PlayerFlag,
-    pub equip_atk: i16,
-    pub equip_def: i16,
 }
 
 impl EquipStat {
-    pub fn probe(&self, player: &PlayerCombat) -> ProbeStat {
-        if self.equip_atk > 0 && self.equip_atk > player.equip_atk {
-            let flag = (player.equip_flag & PlayerFlag::WEAPON_MASK) ^ self.equip_flag;
-            let diff = PlayerStat {
+    // Test result of changing equipment
+    fn probe(&self, player: &EquipStat) -> ProbeStat {
+        if self.atk > 0 && self.atk > player.atk {
+            let flag = (player.flag & PlayerFlag::WEAPON_MASK) ^ self.flag;
+            let atk = self.atk - player.atk;
+            let equip = EquipStat {
                 flag,
-                atk: self.equip_atk - player.equip_atk,
-                equip_flag: flag,
-                equip_atk: self.equip_atk - player.equip_atk,
+                atk,
                 ..Default::default()
             };
-
+            let combat = PlayerCombat {
+                flag,
+                atk,
+                equip,
+                ..Default::default()
+            };
+            let diff = PlayerStat {
+                combat,
+                ..Default::default()
+            };
             ProbeStat {
                 diff,
                 ..Default::default()
             }
-        } else if self.equip_def > 0 && self.equip_def > player.equip_def {
-            let flag = (player.equip_flag & PlayerFlag::SHIELD_MASK) ^ self.equip_flag;
-            let diff = PlayerStat {
+        } else if self.def > 0 && self.def > player.def {
+            let flag = (player.flag & PlayerFlag::SHIELD_MASK) ^ self.flag;
+            let def = self.def - player.def;
+            let equip = EquipStat {
                 flag,
-                def: self.equip_def - player.equip_def,
-                equip_flag: flag,
-                equip_def: self.equip_def - player.equip_def,
+                def,
                 ..Default::default()
             };
-
+            let combat = PlayerCombat {
+                flag,
+                def,
+                equip,
+                ..Default::default()
+            };
+            let diff = PlayerStat {
+                combat,
+                ..Default::default()
+            };
             ProbeStat {
                 diff,
                 ..Default::default()
             }
-        } else if self.equip_flag.is_empty() {
-            let flag = (player.equip_flag & PlayerFlag::ACCESSORY_MASK) ^ self.equip_flag;
-            let diff = PlayerStat {
+        } else if !self.flag.is_empty() {
+            let flag = (player.flag & PlayerFlag::ACCESSORY_MASK) ^ self.flag;
+            let equip = EquipStat {
                 flag,
-                equip_flag: flag,
                 ..Default::default()
             };
-
+            let combat = PlayerCombat {
+                flag,
+                equip,
+                ..Default::default()
+            };
+            let diff = PlayerStat {
+                combat,
+                ..Default::default()
+            };
             ProbeStat {
                 diff,
                 ..Default::default()
@@ -360,69 +424,65 @@ impl EquipStat {
         }
     }
 
-    // TODO move these to PlayerCombat?
-    pub fn unequip(
-        player: &PlayerCombat,
-        weapon: bool,
-        shield: bool,
-        accessory: bool,
-    ) -> ProbeStat {
+    // TODO make this a method
+    // Test result of unequipping equipment
+    fn unequip(player: &EquipStat, weapon: bool, shield: bool, accessory: bool) -> ProbeStat {
         let mut flag = PlayerFlag::empty();
         let mut atk = 0;
         let mut def = 0;
         if weapon {
-            flag |= player.equip_flag & PlayerFlag::WEAPON_MASK;
-            atk = -player.equip_atk;
+            flag |= player.flag & PlayerFlag::WEAPON_MASK;
+            atk = -player.atk;
         }
         if shield {
-            flag |= player.equip_flag & PlayerFlag::SHIELD_MASK;
-            def = -player.equip_def;
+            flag |= player.flag & PlayerFlag::SHIELD_MASK;
+            def = -player.def;
         }
         if accessory {
-            flag |= player.equip_flag & PlayerFlag::ACCESSORY_MASK;
+            flag |= player.flag & PlayerFlag::ACCESSORY_MASK;
         }
-
-        let diff = PlayerStat {
+        let combat = PlayerCombat {
             flag,
             atk,
             def,
             ..Default::default()
         };
-
+        let diff = PlayerStat {
+            combat,
+            ..Default::default()
+        };
         ProbeStat {
             diff,
             ..Default::default()
         }
     }
 
-    pub fn reequip(
-        player: &PlayerCombat,
-        weapon: bool,
-        shield: bool,
-        accessory: bool,
-    ) -> ProbeStat {
+    // Test result of reequipping equipment
+    fn reequip(player: &EquipStat, weapon: bool, shield: bool, accessory: bool) -> ProbeStat {
         let mut flag = PlayerFlag::empty();
         let mut atk = 0;
         let mut def = 0;
         if weapon {
-            flag |= player.equip_flag & PlayerFlag::WEAPON_MASK;
-            atk = player.equip_atk;
+            flag |= player.flag & PlayerFlag::WEAPON_MASK;
+            atk = player.atk;
         }
         if shield {
-            flag |= player.equip_flag & PlayerFlag::SHIELD_MASK;
-            def = player.equip_def;
+            flag |= player.flag & PlayerFlag::SHIELD_MASK;
+            def = player.def;
         }
         if accessory {
-            flag |= player.equip_flag & PlayerFlag::ACCESSORY_MASK;
+            flag |= player.flag & PlayerFlag::ACCESSORY_MASK;
         }
-
-        let diff = PlayerStat {
+        let combat = PlayerCombat {
             flag,
             atk,
             def,
             ..Default::default()
         };
-
+        let diff = PlayerStat {
+            combat,
+            ..Default::default()
+        };
         ProbeStat {
             diff,
             ..Default::default()
@@ -430,59 +490,50 @@ impl EquipStat {
     }
 }
 
-pub struct HpBoostStat {
-    pub hp: i32,
-    pub flag: PlayerFlag,
-    pub atk: i16,
-    pub def: i16,
-    pub equip_flag: PlayerFlag,
-    pub equip_atk: i16,
-    pub equip_def: i16,
-    pub gr: i16,
-    pub yk: i8,
-    pub gk: i8,
-    pub bk: i8,
-    pub counter: i8, // ignore
+// TODO support percent damage
+// Boost health by applying multiplier to existing stats
+struct HpBoostStat {
+    mult: PlayerCombat,
 }
 
 impl HpBoostStat {
-    pub fn probe(&self, player: &PlayerCombat) -> ProbeStat {
-        let hp_diff = Self::percent_floor(self.hp, player.hp + 1)
-            + Self::percent_floor(self.atk, player.atk)
-            + Self::percent_floor(self.def, player.def)
-            + Self::percent_floor(self.equip_atk, player.equip_atk)
-            + Self::percent_floor(self.equip_def, player.equip_def);
-
-        let diff = PlayerStat {
-            hp: hp_diff,
-            ..Default::default()
-        };
-
-        if hp_diff >= 0 {
-            ProbeStat {
-                diff,
-                ..Default::default()
-            }
-        } else {
-            ProbeStat { diff, req: -diff }
-        }
-    }
-
-    fn percent_floor<T: Into<i32>>(scale: T, num: T) -> i32 {
-        let scale = scale.into();
-        let num = num.into();
-        let prod = scale * num;
+    fn percent_floor<T: Into<i32>>(mult: T, num: T) -> i32 {
+        let prod = mult.into() * num.into();
         if prod >= 0 {
             prod / 100
         } else {
             (prod - 99) / 100
         }
     }
+
+    fn probe(&self, player: &PlayerCombat) -> ProbeStat {
+        let hp = Self::percent_floor(self.mult.atk, player.atk)
+            + Self::percent_floor(self.mult.def, player.def)
+            + Self::percent_floor(self.mult.equip.atk, player.equip.atk)
+            + Self::percent_floor(self.mult.equip.def, player.equip.def);
+
+        let diff = PlayerStat {
+            hp,
+            ..Default::default()
+        };
+
+        if hp >= 0 {
+            ProbeStat {
+                diff,
+                ..Default::default()
+            }
+        } else {
+            ProbeStat {
+                diff: diff.clone(),
+                req: -diff,
+            }
+        }
+    }
 }
 
 // Monster behavior that affect combat
 bitflags! {
-    pub struct MonsterFlag: u16 {
+    struct MonsterFlag: u16 {
         const ONE_HIT               = 0b0000000001;
         const ATTACK_FIRST          = 0b0000000010;
         const SURPRISED_FROM_BEHIND = 0b0000000100;
@@ -497,17 +548,16 @@ bitflags! {
 }
 
 // Stats of a monster
-#[derive(Debug)]
-pub struct MonsterStat {
-    pub flag: MonsterFlag,
-    pub hp: i32,
-    pub atk: i16,
-    pub def: i16,
-    pub gr: i16,
+struct MonsterStat {
+    flag: MonsterFlag,
+    hp: i32,
+    atk: i16,
+    def: i16,
+    gr: i16,
 }
 
 impl MonsterStat {
-    // Results of fighting a monster
+    // Test result of fighting monster
     fn probe(&self, player: &PlayerCombat) -> ProbeStat {
         if player.flag.contains(PlayerFlag::DEAD) {
             return ProbeStat::default();
@@ -540,18 +590,24 @@ impl MonsterStat {
         let monster_def = self.def as i32;
         let monster_hp = self.hp;
 
+        // Cannot fight monster
         if player_atk <= monster_def {
-            let dead = PlayerStat {
+            let combat = PlayerCombat {
                 flag: PlayerFlag::DEAD,
                 ..Default::default()
             };
+            let dead = PlayerStat {
+                combat,
+                ..Default::default()
+            };
             return ProbeStat {
-                diff: dead,
+                diff: dead.clone(),
                 req: dead,
             };
         }
 
         let hp_cost = if player_def >= monster_atk {
+            // Monster cannot hurt player
             0
         } else {
             // Number of hits when attacking with sword against default monster
@@ -568,7 +624,7 @@ impl MonsterStat {
                 hits -= 1;
             }
 
-            // Monsters attacked from behind loses its first hit if any
+            // Monster attacked from behind loses its first hit
             if self.flag.contains(MonsterFlag::SURPRISED_FROM_BEHIND) && hits > 0 {
                 hits -= 1;
             }
@@ -578,7 +634,7 @@ impl MonsterStat {
                 hits += 1;
             }
 
-            // Represents taking a single hit from automatic attack or sword without fighting
+            // Take a single hit from automatic attack or sword without fighting
             if self.flag.contains(MonsterFlag::ONE_HIT) {
                 hits = 1;
             }
@@ -598,26 +654,23 @@ impl MonsterStat {
             gr: monster_gr,
             ..Default::default()
         };
-
         let req = PlayerStat {
             hp: hp_cost,
             ..Default::default()
         };
-
         ProbeStat { diff, req }
     }
 }
 
-// Types of elements in a room
-// #[derive(Debug)]
-pub enum Element {
-    Resource(PlayerStat),    // Gives player stats
-    Cost(PlayerStat),        // Removes player stats
-    Requirement(PlayerStat), // Requires certain stats to fight
-    Counter(i8),
-    Monster(MonsterStat), // Fight monster to pass
-    Equipment(EquipStat), // Gives player equipment, replaces old equipment
+// Elements in a room that affect player
+enum Element {
+    Resource(PlayerStat),    // Give player resources
+    Cost(PlayerStat),        // Remove player resources
+    Requirement(PlayerStat), // Require certain stats
+    Monster(MonsterStat),    // Fight monster
+    Equipment(EquipStat),    // Swap equipment
     Inventory {
+        // Equip/Unequip equipment
         equip: bool,
         weapon: bool,
         shield: bool,
@@ -625,81 +678,75 @@ pub enum Element {
     },
     HpBoost(HpBoostStat),
     Room(Box<Room>),
-    // Choice,
 }
 
 impl Element {
-    // Test results of going through room element
+    // Test results of passing room element
     fn probe(&self, player: &PlayerCombat) -> ProbeStat {
         match self {
-            Element::Resource(resource) => ProbeStat {
-                diff: *resource,
+            Self::Resource(resource) => ProbeStat {
+                diff: resource.clone(),
                 req: PlayerStat::default(),
             },
-            Element::Cost(cost) => ProbeStat {
-                diff: -*cost,
-                req: *cost,
+            Self::Cost(cost) => ProbeStat {
+                diff: -cost.clone(),
+                req: cost.clone(),
             },
-            Element::Requirement(req) => ProbeStat {
+            Self::Requirement(req) => ProbeStat {
                 diff: PlayerStat::default(),
-                req: *req,
+                req: req.clone(),
             },
-            Element::Counter(set) => ProbeStat {
-                diff: PlayerStat {
-                    counter: *set - player.counter,
-                    ..Default::default()
-                },
-                req: PlayerStat::default(),
-            },
-            Element::Monster(monster) => monster.probe(player),
-            Element::Equipment(equip) => equip.probe(player),
-            Element::Inventory {
+            Self::Monster(monster) => monster.probe(player),
+            Self::Equipment(equip) => equip.probe(&player.equip),
+            Self::Inventory {
                 equip,
                 weapon,
                 shield,
                 accessory,
             } => {
                 if *equip {
-                    EquipStat::reequip(player, *weapon, *shield, *accessory)
+                    EquipStat::reequip(&player.equip, *weapon, *shield, *accessory)
                 } else {
-                    EquipStat::unequip(player, *weapon, *shield, *accessory)
+                    EquipStat::unequip(&player.equip, *weapon, *shield, *accessory)
                 }
             }
-            Element::HpBoost(boost) => boost.probe(player),
-            Element::Room(room) => room.probe(player),
+            Self::HpBoost(boost) => boost.probe(player),
+            Self::Room(room) => room.probe(player),
         }
     }
 }
 
 // Special ways room should be treated when visiting
 bitflags! {
-    pub struct RoomType: u8 {
-        const INTERMEDIATE      = 0b000001;   // Must leave through neighboring rooms
+    struct RoomType: u8 {
+        const INTERMEDIATE      = 0b000001;
         const ONLY_WHEN_FREE    = 0b000010;
         const PRIORITY          = 0b000100;
         const DELAYED           = 0b001000;
+
+        #[cfg(feature = "closed-level")]
         const REPEATED          = 0b010000;
+        #[cfg(feature = "closed-level")]
         const CLEAR_NEIGHBORS   = 0b100000;
     }
 }
 
-// Room contains a sequence of elements that must all be completed
-// #[derive(Debug)]
-pub struct Room {
-    pub name: String,
-    pub content: Vec<Element>,
-    pub room_type: RoomType,
+// Sequence of elements that must all be completed
+struct Room {
+    name: String,
+    content: Vec<Element>,
+    room_type: RoomType,
 }
 
 impl Room {
-    // Test result of going through each element in order
-    pub fn probe(&self, player: &PlayerCombat) -> ProbeStat {
-        let mut stat = PlayerStat::from(*player);
+    // Test result of going through each element
+    fn probe(&self, player: &PlayerCombat) -> ProbeStat {
+        let mut stat = player.clone();
         let mut res = ProbeStat::default();
         for element in &self.content {
-            let probe = element.probe(&PlayerCombat::from(stat));
-            res += probe;
-            stat += probe.diff;
+            let probe = element.probe(&stat);
+            res += &probe;
+            stat += &probe.diff.combat;
         }
         res
     }
@@ -707,158 +754,156 @@ impl Room {
 
 // TODO split into builder
 // Represent level as a graph of rooms
-// #[derive(Debug)]
-pub struct Level {
-    pub next_id: VertexIDType,
-    pub vertices_mask: BitSet,
-    pub boundary_mask: BitSet,
-    pub neighbors: Vec<BitSet>,
-    pub toggle_neighbors: Vec<BitSet>,
-    pub use_edge: bool,
-    pub entrance: VertexIDType,
-    pub exit: VertexIDType,
-
+struct Level {
+    next_id: VertexIDType,
+    vertices_mask: BitSet,
+    boundary_mask: BitSet,
+    neighbors: Vec<BitSet>,
+    toggle_neighbors: Vec<BitSet>,
+    use_edge: bool,
     current_vertex_id: VertexIDType,
     name2id: HashMap<String, VertexIDType>,
     vertices: Vec<Room>,
+    entrance: VertexIDType,
+    exit: VertexIDType,
 }
 
-impl Level {
-    pub fn new() -> Self {
-        Self {
-            next_id: 0,
-            vertices_mask: BitSet::new(),
-            boundary_mask: BitSet::new(),
-            neighbors: Vec::new(),
-            toggle_neighbors: Vec::new(),
-            use_edge: false,
-            entrance: u8::MAX,
-            exit: u8::MAX,
-            current_vertex_id: u8::MAX,
-            name2id: HashMap::new(),
-            vertices: Vec::new(),
-        }
-    }
+// impl Level {
+//     pub fn new() -> Self {
+//         Self {
+//             next_id: 0,
+//             vertices_mask: BitSet::new(),
+//             boundary_mask: BitSet::new(),
+//             neighbors: Vec::new(),
+//             toggle_neighbors: Vec::new(),
+//             use_edge: false,
+//             entrance: u8::MAX,
+//             exit: u8::MAX,
+//             current_vertex_id: u8::MAX,
+//             name2id: HashMap::new(),
+//             vertices: Vec::new(),
+//         }
+//     }
 
-    pub fn select_id(&mut self, id: VertexIDType) -> &mut Self {
-        self.current_vertex_id = id;
-        self
-    }
+//     pub fn select_id(&mut self, id: VertexIDType) -> &mut Self {
+//         self.current_vertex_id = id;
+//         self
+//     }
 
-    pub fn select_name(&mut self, name: &str) -> &mut Self {
-        self.select_id(self.id(name))
-    }
+//     pub fn select_name(&mut self, name: &str) -> &mut Self {
+//         self.select_id(self.id(name))
+//     }
 
-    pub fn select_room(&mut self, room: Room) -> &mut Self {
-        if self.name2id.contains_key(&room.name) {
-            // TODO improve error reporting
-            panic!(String::from("the room has aleady been added: ") + &room.name);
-        }
-        self.vertices_mask.set_bit(self.next_id as usize, true);
-        if room.room_type.contains(RoomType::REPEATED) {
-            self.boundary_mask.set_bit(self.next_id as usize, true);
-        }
-        self.current_vertex_id = self.next_id;
-        self.next_id += 1;
-        self.name2id
-            .insert(room.name.clone(), self.current_vertex_id);
-        self.vertices.push(room);
-        self.neighbors.push(BitSet::new());
-        self.toggle_neighbors.push(BitSet::new());
-        self
-    }
+//     pub fn select_room(&mut self, room: Room) -> &mut Self {
+//         if self.name2id.contains_key(&room.name) {
+//             // TODO improve error reporting
+//             panic!(String::from("the room has aleady been added: ") + &room.name);
+//         }
+//         self.vertices_mask.set_bit(self.next_id as usize, true);
+//         if room.room_type.contains(RoomType::REPEATED) {
+//             self.boundary_mask.set_bit(self.next_id as usize, true);
+//         }
+//         self.current_vertex_id = self.next_id;
+//         self.next_id += 1;
+//         self.name2id
+//             .insert(room.name.clone(), self.current_vertex_id);
+//         self.vertices.push(room);
+//         self.neighbors.push(BitSet::new());
+//         self.toggle_neighbors.push(BitSet::new());
+//         self
+//     }
 
-    pub fn add_arc(&mut self, id0: VertexIDType, id1: VertexIDType) -> &mut Self {
-        if id0 < self.next_id && id1 < self.next_id {
-            self.neighbors[id0 as usize].set_bit(id1 as usize, true)
-        }
-        self
-    }
+//     pub fn add_arc(&mut self, id0: VertexIDType, id1: VertexIDType) -> &mut Self {
+//         if id0 < self.next_id && id1 < self.next_id {
+//             self.neighbors[id0 as usize].set_bit(id1 as usize, true)
+//         }
+//         self
+//     }
 
-    pub fn add_id(&mut self, id: VertexIDType) -> &mut Self {
-        let id0 = self.current_vertex_id;
-        let id1 = self.select_id(id).current_vertex_id;
-        if self.use_edge {
-            self.add_arc(id1, id0);
-        }
-        self.add_arc(id0, id1)
-    }
+//     pub fn add_id(&mut self, id: VertexIDType) -> &mut Self {
+//         let id0 = self.current_vertex_id;
+//         let id1 = self.select_id(id).current_vertex_id;
+//         if self.use_edge {
+//             self.add_arc(id1, id0);
+//         }
+//         self.add_arc(id0, id1)
+//     }
 
-    pub fn add_name(&mut self, name: &str) -> &mut Self {
-        self.add_id(self.id(name))
-    }
+//     pub fn add_name(&mut self, name: &str) -> &mut Self {
+//         self.add_id(self.id(name))
+//     }
 
-    pub fn add_room(&mut self, room: Room) -> &mut Self {
-        let id0 = self.current_vertex_id;
-        let id1 = self.select_room(room).current_vertex_id;
-        if self.use_edge {
-            self.add_arc(id1, id0);
-        }
-        self.add_arc(id0, id1)
-    }
+//     pub fn add_room(&mut self, room: Room) -> &mut Self {
+//         let id0 = self.current_vertex_id;
+//         let id1 = self.select_room(room).current_vertex_id;
+//         if self.use_edge {
+//             self.add_arc(id1, id0);
+//         }
+//         self.add_arc(id0, id1)
+//     }
 
-    pub fn toggle(&mut self, id0: VertexIDType, id1: VertexIDType) -> &mut Self {
-        if id0 < self.next_id && id1 < self.next_id {
-            self.toggle_neighbors[id0 as usize].set_bit(id1 as usize, true)
-        }
-        self
-    }
+//     pub fn toggle(&mut self, id0: VertexIDType, id1: VertexIDType) -> &mut Self {
+//         if id0 < self.next_id && id1 < self.next_id {
+//             self.toggle_neighbors[id0 as usize].set_bit(id1 as usize, true)
+//         }
+//         self
+//     }
 
-    pub fn toggle_name(&mut self, name0: &str, name1: &str) -> &mut Self {
-        self.toggle(self.id(name0), self.id(name1))
-    }
+//     pub fn toggle_name(&mut self, name0: &str, name1: &str) -> &mut Self {
+//         self.toggle(self.id(name0), self.id(name1))
+//     }
 
-    pub fn id(&self, name: &str) -> VertexIDType {
-        let id = self.name2id.get(name);
-        *id.expect(&(String::from("cannot find vertex with given name: ") + name))
-    }
+//     pub fn id(&self, name: &str) -> VertexIDType {
+//         let id = self.name2id.get(name);
+//         *id.expect(&(String::from("cannot find vertex with given name: ") + name))
+//     }
 
-    pub fn reset(&mut self) -> &mut Self {
-        self.current_vertex_id = u8::MAX;
-        self
-    }
+//     pub fn reset(&mut self) -> &mut Self {
+//         self.current_vertex_id = u8::MAX;
+//         self
+//     }
 
-    pub fn vertex(&self) -> &Room {
-        &self.vertices[self.current_vertex_id as usize]
-    }
+//     pub fn vertex(&self) -> &Room {
+//         &self.vertices[self.current_vertex_id as usize]
+//     }
 
-    pub fn vertex_of_id(&self, id: VertexIDType) -> &Room {
-        &self.vertices[id as usize]
-    }
+//     pub fn vertex_of_id(&self, id: VertexIDType) -> &Room {
+//         &self.vertices[id as usize]
+//     }
 
-    pub fn vertex_of_name(&self, name: &str) -> &Room {
-        self.vertex_of_id(self.id(name))
-    }
+//     pub fn vertex_of_name(&self, name: &str) -> &Room {
+//         self.vertex_of_id(self.id(name))
+//     }
 
-    pub fn set_entrance(&mut self) -> &mut Self {
-        self.entrance = self.current_vertex_id;
-        self
-    }
+//     pub fn set_entrance(&mut self) -> &mut Self {
+//         self.entrance = self.current_vertex_id;
+//         self
+//     }
 
-    pub fn set_entrance_id(&mut self, id: VertexIDType) -> &mut Self {
-        self.entrance = id;
-        self
-    }
+//     pub fn set_entrance_id(&mut self, id: VertexIDType) -> &mut Self {
+//         self.entrance = id;
+//         self
+//     }
 
-    pub fn set_entrance_name(&mut self, name: &str) -> &mut Self {
-        self.set_entrance_id(self.id(name))
-    }
+//     pub fn set_entrance_name(&mut self, name: &str) -> &mut Self {
+//         self.set_entrance_id(self.id(name))
+//     }
 
-    pub fn set_exit(&mut self) -> &mut Self {
-        self.exit = self.current_vertex_id;
-        self
-    }
+//     pub fn set_exit(&mut self) -> &mut Self {
+//         self.exit = self.current_vertex_id;
+//         self
+//     }
 
-    pub fn set_exit_id(&mut self, id: VertexIDType) -> &mut Self {
-        self.exit = id;
-        self
-    }
+//     pub fn set_exit_id(&mut self, id: VertexIDType) -> &mut Self {
+//         self.exit = id;
+//         self
+//     }
 
-    pub fn set_exit_name(&mut self, name: &str) -> &mut Self {
-        self.set_exit_id(self.id(name))
-    }
-}
+//     pub fn set_exit_name(&mut self, name: &str) -> &mut Self {
+//         self.set_exit_id(self.id(name))
+//     }
+// }
 
-pub struct LevelInfo {
-    pub max_config_numner: i32,
-}
+// pub struct LevelInfo {
+//     pub max_config_numner: i32,
+// }

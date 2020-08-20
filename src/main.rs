@@ -1,8 +1,8 @@
-// #[macro_use]
-// extern crate bitflags;
+#[macro_use]
+extern crate bitflags;
 extern crate rust_dense_bitset;
 
-// mod drod;
+mod drod;
 // use drod::{Level, PlayerStat, Solver};
 
 use rust_dense_bitset::DenseBitSet as BitSet;

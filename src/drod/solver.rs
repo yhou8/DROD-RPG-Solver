@@ -93,11 +93,17 @@ struct PlayerScore {
     score: i32,
 }
 
-// impl Ge for PlayerScore {
-//     fn ge(&self, other: &Self) -> bool {
-//         self.score >= other.score
-//     }
-// }
+impl PlayerScore {
+    fn new() -> Self {
+        Self { score: 0 }
+    }
+}
+
+impl Ge for PlayerScore {
+    fn ge(&self, other: &Self) -> bool {
+        self.score >= other.score
+    }
+}
 
 impl Display for PlayerScore {
     fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
@@ -279,6 +285,10 @@ struct PlayerTrace {
 }
 
 impl PlayerTrace {
+    fn new() -> Self {
+        todo!()
+    }
+
     fn visit(&mut self, location: VertexIDType) {
         self.player.visit(
             location,
@@ -313,6 +323,71 @@ impl PlayerTrace {
     // fn print(&self, writer: &mut dyn Write, init_player: &Player) -> io::Result<()> {
     //     todo!()
     // }
+}
+
+// Track pareto frontier of traces by stat
+struct OptimalStatSet {
+    trace: Vec<PlayerTrace>,
+}
+
+impl OptimalStatSet {
+    fn addable(&self, stat: &PlayerStat) -> bool {
+        self.trace.iter().all(|trace| !trace.player.stat.ge(stat))
+    }
+
+    fn add(&mut self, trace: PlayerTrace, force: bool) -> bool {
+        let new_stat = &trace.player.stat;
+        if force || self.addable(&new_stat) {
+            self.trace.retain(|trace| !new_stat.ge(&trace.player.stat));
+            self.trace.push(trace);
+            true
+        } else {
+            false
+        }
+    }
+
+    fn add_all(&mut self, other: Self) {
+        for trace in other.trace {
+            self.add(trace, false);
+        }
+    }
+}
+
+// Track trace with optimal score
+struct OptimalScore {
+    trace: PlayerTrace,
+    score: PlayerScore,
+}
+
+impl OptimalScore {
+    fn addable(&self, score: &PlayerScore) -> bool {
+        !self.score.ge(score)
+    }
+
+    fn add_all(&mut self, other: Self) -> bool {
+        if self.score.ge(&other.score) {
+            false
+        } else {
+            *self = other;
+            true
+        }
+    }
+
+    fn add(&mut self, trace: PlayerTrace, force: bool) -> bool {
+        let score = trace.player.score();
+        if force || self.addable(&score) {
+            self.trace = trace;
+            self.score = score;
+            true
+        } else {
+            false
+        }
+    }
+
+    fn clear(&mut self) {
+        self.trace = PlayerTrace::new();
+        self.score = PlayerScore::new();
+    }
 }
 
 // // Represents state of player and choices after visiting a set of rooms

@@ -1,18 +1,14 @@
+use super::{Ge, VertexIDType};
+
 // use rust_dense_bitset::BitSet as _;
 use rust_dense_bitset::DenseBitSet as BitSet;
 
 use std::collections::HashMap;
-// use std::fmt;
-// use std::fmt::{Display, Formatter};
+use std::fmt;
+use std::fmt::{Display, Formatter};
 // use std::io::Write;
 use std::ops::{Add, AddAssign, Neg, Sub};
 // use std::u8;
-
-type VertexIDType = u8;
-
-// trait Ge {
-//     fn ge(&self, other: &Self) -> bool;
-// }
 
 // Character behaviors that affect gameplay
 bitflags! {
@@ -29,40 +25,40 @@ bitflags! {
     }
 }
 
-// impl Display for PlayerFlag {
-//     fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
-//         let dead = if self.contains(PlayerFlag::DEAD) {
-//             " DEAD"
-//         } else {
-//             ""
-//         };
-//         let has_weapon = if self.contains(PlayerFlag::HAS_WEAPON) {
-//             " HAS_WEAPON"
-//         } else {
-//             ""
-//         };
-//         let double_gr = if self.contains(PlayerFlag::DOUBLE_GR_WEAPON) {
-//             " DOUBLE_GR_WEAPON"
-//         } else {
-//             ""
-//         };
-//         let double_goblin = if self.contains(PlayerFlag::DOUBLE_ATK_AGAINST_GOBLIN) {
-//             " DOUBLE_ATK_AGAINST_GOBLIN"
-//         } else {
-//             ""
-//         };
-//         let double_wyrm = if self.contains(PlayerFlag::DOUBLE_ATK_AGAINST_WYRM) {
-//             " DOUBLE_ATK_AGAINST_WYRM"
-//         } else {
-//             ""
-//         };
-//         write!(
-//             f,
-//             "{}{}{}{}{}",
-//             dead, has_weapon, double_gr, double_goblin, double_wyrm
-//         )
-//     }
-// }
+impl Display for PlayerFlag {
+    fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
+        let dead = if self.contains(PlayerFlag::DEAD) {
+            " DEAD"
+        } else {
+            ""
+        };
+        let has_weapon = if self.contains(PlayerFlag::HAS_WEAPON) {
+            " HAS_WEAPON"
+        } else {
+            ""
+        };
+        let double_gr = if self.contains(PlayerFlag::DOUBLE_GR_WEAPON) {
+            " DOUBLE_GR_WEAPON"
+        } else {
+            ""
+        };
+        let double_goblin = if self.contains(PlayerFlag::DOUBLE_ATK_AGAINST_GOBLIN) {
+            " DOUBLE_ATK_AGAINST_GOBLIN"
+        } else {
+            ""
+        };
+        let double_wyrm = if self.contains(PlayerFlag::DOUBLE_ATK_AGAINST_WYRM) {
+            " DOUBLE_ATK_AGAINST_WYRM"
+        } else {
+            ""
+        };
+        write!(
+            f,
+            "{}{}{}{}{}",
+            dead, has_weapon, double_gr, double_goblin, double_wyrm
+        )
+    }
+}
 
 #[derive(Clone, Default)]
 struct EquipStat {
@@ -83,11 +79,11 @@ impl EquipStat {
     }
 }
 
-// impl Ge for EquipStat {
-//     fn ge(&self, other: &Self) -> bool {
-//         self.flag.contains(other.flag) && self.atk >= other.atk && self.def >= other.def
-//     }
-// }
+impl Ge for EquipStat {
+    fn ge(&self, other: &Self) -> bool {
+        self.flag.contains(other.flag) && self.atk >= other.atk && self.def >= other.def
+    }
+}
 
 impl AddAssign<&Self> for EquipStat {
     fn add_assign(&mut self, other: &Self) {
@@ -121,22 +117,22 @@ impl Neg for EquipStat {
     }
 }
 
-// impl Display for EquipStat {
-//     fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
-//         write!(
-//             f,
-//             "equip_flag: {}, equip_atk: {}, equip_def: {}",
-//             self.flag, self.atk, self.def
-//         )
-//     }
-// }
+impl Display for EquipStat {
+    fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
+        write!(
+            f,
+            "equip_flag: {}, equip_atk: {}, equip_def: {}",
+            self.flag, self.atk, self.def
+        )
+    }
+}
 
 // Player stats that affect combat
 #[derive(Clone, Default)]
-struct PlayerCombat {
+pub(super) struct PlayerCombat {
     flag: PlayerFlag,
-    atk: i16,
-    def: i16,
+    pub(super) atk: i16,
+    pub(super) def: i16,
     equip: EquipStat,
 }
 
@@ -153,14 +149,14 @@ impl PlayerCombat {
     }
 }
 
-// impl Ge for PlayerCombat {
-//     fn ge(&self, other: &Self) -> bool {
-//         self.flag.contains(other.flag)
-//             && self.atk >= other.atk
-//             && self.def >= other.def
-//             && self.equip.ge(&other.equip)
-//     }
-// }
+impl Ge for PlayerCombat {
+    fn ge(&self, other: &Self) -> bool {
+        self.flag.contains(other.flag)
+            && self.atk >= other.atk
+            && self.def >= other.def
+            && self.equip.ge(&other.equip)
+    }
+}
 
 impl AddAssign<&Self> for PlayerCombat {
     fn add_assign(&mut self, other: &Self) {
@@ -210,13 +206,13 @@ impl Neg for PlayerCombat {
 // HP is shifted by 1 so that 0 is considered alive.
 // This change makes code cleaner.
 #[derive(Clone, Default)]
-struct PlayerStat {
-    hp: i32,
+pub(super) struct PlayerStat {
+    pub(super) hp: i32,
     combat: PlayerCombat,
     gr: i16,
-    yk: i8,
-    gk: i8,
-    bk: i8,
+    pub(super) yk: i8,
+    pub(super) gk: i8,
+    pub(super) bk: i8,
 }
 
 impl PlayerStat {
@@ -240,16 +236,22 @@ impl PlayerStat {
     }
 }
 
-// impl Ge for PlayerStat {
-//     fn ge(&self, other: &Self) -> bool {
-//         self.hp >= other.hp
-//             && self.combat.ge(&other.combat)
-//             && self.gr >= other.gr
-//             && self.yk >= other.yk
-//             && self.gk >= other.gk
-//             && self.bk >= other.bk
-//     }
-// }
+impl AsRef<PlayerCombat> for PlayerStat {
+    fn as_ref(&self) -> &PlayerCombat {
+        &self.combat
+    }
+}
+
+impl Ge for PlayerStat {
+    fn ge(&self, other: &Self) -> bool {
+        self.hp >= other.hp
+            && self.combat.ge(&other.combat)
+            && self.gr >= other.gr
+            && self.yk >= other.yk
+            && self.gk >= other.gk
+            && self.bk >= other.bk
+    }
+}
 
 impl AddAssign<&Self> for PlayerStat {
     fn add_assign(&mut self, other: &Self) {
@@ -292,6 +294,24 @@ impl Neg for PlayerStat {
     }
 }
 
+impl Display for PlayerStat {
+    fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
+        writeln!(
+            f,
+            "hp: {}, flag: {}, atk: {}, def: {}, {}, gr: {}, yk: {}, gk: {}, bk: {}",
+            self.hp + 1,
+            self.combat.flag,
+            self.combat.atk,
+            self.combat.def,
+            self.combat.equip,
+            self.gr,
+            self.yk,
+            self.gk,
+            self.bk
+        )
+    }
+}
+
 // #[derive(Eq, PartialEq)]
 struct PlayerObjective {
     hp: i32,
@@ -313,36 +333,10 @@ struct PlayerObjective {
 //     }
 // }
 
-struct PlayerScore {
-    score: i32,
-}
-
-// impl Ge for PlayerScore {
-//     fn ge(&self, other: &Self) -> bool {
-//         self.score >= other.score
-//     }
-// }
-
-// impl Display for PlayerScore {
-//     fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
-//         let score_modk = self.score % 1000;
-//         let tenth = if score_modk < 100 { "0" } else { "" };
-//         let hundredth = if score_modk < 10 { "0" } else { "" };
-//         write!(
-//             f,
-//             "{}.{}{}{}",
-//             self.score / 1000,
-//             tenth,
-//             hundredth,
-//             score_modk
-//         )
-//     }
-// }
-
 // Result of completing a room element
 #[derive(Clone, Default)]
-struct ProbeStat {
-    diff: PlayerStat,
+pub(super) struct ProbeStat {
+    pub(super) diff: PlayerStat,
     req: PlayerStat,
 }
 
@@ -718,7 +712,7 @@ impl Element {
 
 // Special ways room should be treated when visiting
 bitflags! {
-    struct RoomType: u8 {
+    pub(super) struct RoomType: u8 {
         const INTERMEDIATE      = 0b000001;
         const ONLY_WHEN_FREE    = 0b000010;
         const PRIORITY          = 0b000100;
@@ -732,15 +726,15 @@ bitflags! {
 }
 
 // Sequence of elements that must all be completed
-struct Room {
-    name: String,
+pub(super) struct Room {
+    pub(super) name: String,
     content: Vec<Element>,
-    room_type: RoomType,
+    pub(super) room_type: RoomType,
 }
 
 impl Room {
     // Test result of going through each element
-    fn probe(&self, player: &PlayerCombat) -> ProbeStat {
+    pub(super) fn probe(&self, player: &PlayerCombat) -> ProbeStat {
         let mut stat = player.clone();
         let mut res = ProbeStat::default();
         for element in &self.content {
@@ -754,155 +748,157 @@ impl Room {
 
 // TODO split into builder
 // Represent level as a graph of rooms
-struct Level {
+pub(super) struct Level {
     next_id: VertexIDType,
     vertices_mask: BitSet,
-    boundary_mask: BitSet,
-    neighbors: Vec<BitSet>,
-    toggle_neighbors: Vec<BitSet>,
+    pub(super) neighbors: Vec<BitSet>,
+    pub(super) toggle_neighbors: Vec<BitSet>,
     use_edge: bool,
     current_vertex_id: VertexIDType,
     name2id: HashMap<String, VertexIDType>,
     vertices: Vec<Room>,
-    entrance: VertexIDType,
+    pub(super) entrance: VertexIDType,
     exit: VertexIDType,
+
+    #[cfg(feature = "closed-level")]
+    pub(super) boundary_mask: BitSet,
 }
 
-// impl Level {
-//     pub fn new() -> Self {
-//         Self {
-//             next_id: 0,
-//             vertices_mask: BitSet::new(),
-//             boundary_mask: BitSet::new(),
-//             neighbors: Vec::new(),
-//             toggle_neighbors: Vec::new(),
-//             use_edge: false,
-//             entrance: u8::MAX,
-//             exit: u8::MAX,
-//             current_vertex_id: u8::MAX,
-//             name2id: HashMap::new(),
-//             vertices: Vec::new(),
-//         }
-//     }
+impl Level {
+    //     pub fn new() -> Self {
+    //         Self {
+    //             next_id: 0,
+    //             vertices_mask: BitSet::new(),
+    //             boundary_mask: BitSet::new(),
+    //             neighbors: Vec::new(),
+    //             toggle_neighbors: Vec::new(),
+    //             use_edge: false,
+    //             entrance: u8::MAX,
+    //             exit: u8::MAX,
+    //             current_vertex_id: u8::MAX,
+    //             name2id: HashMap::new(),
+    //             vertices: Vec::new(),
+    //         }
+    //     }
 
-//     pub fn select_id(&mut self, id: VertexIDType) -> &mut Self {
-//         self.current_vertex_id = id;
-//         self
-//     }
+    //     pub fn select_id(&mut self, id: VertexIDType) -> &mut Self {
+    //         self.current_vertex_id = id;
+    //         self
+    //     }
 
-//     pub fn select_name(&mut self, name: &str) -> &mut Self {
-//         self.select_id(self.id(name))
-//     }
+    //     pub fn select_name(&mut self, name: &str) -> &mut Self {
+    //         self.select_id(self.id(name))
+    //     }
 
-//     pub fn select_room(&mut self, room: Room) -> &mut Self {
-//         if self.name2id.contains_key(&room.name) {
-//             // TODO improve error reporting
-//             panic!(String::from("the room has aleady been added: ") + &room.name);
-//         }
-//         self.vertices_mask.set_bit(self.next_id as usize, true);
-//         if room.room_type.contains(RoomType::REPEATED) {
-//             self.boundary_mask.set_bit(self.next_id as usize, true);
-//         }
-//         self.current_vertex_id = self.next_id;
-//         self.next_id += 1;
-//         self.name2id
-//             .insert(room.name.clone(), self.current_vertex_id);
-//         self.vertices.push(room);
-//         self.neighbors.push(BitSet::new());
-//         self.toggle_neighbors.push(BitSet::new());
-//         self
-//     }
+    //     pub fn select_room(&mut self, room: Room) -> &mut Self {
+    //         if self.name2id.contains_key(&room.name) {
+    //             // TODO improve error reporting
+    //             panic!(String::from("the room has aleady been added: ") + &room.name);
+    //         }
+    //         self.vertices_mask.set_bit(self.next_id as usize, true);
+    //         if room.room_type.contains(RoomType::REPEATED) {
+    //             self.boundary_mask.set_bit(self.next_id as usize, true);
+    //         }
+    //         self.current_vertex_id = self.next_id;
+    //         self.next_id += 1;
+    //         self.name2id
+    //             .insert(room.name.clone(), self.current_vertex_id);
+    //         self.vertices.push(room);
+    //         self.neighbors.push(BitSet::new());
+    //         self.toggle_neighbors.push(BitSet::new());
+    //         self
+    //     }
 
-//     pub fn add_arc(&mut self, id0: VertexIDType, id1: VertexIDType) -> &mut Self {
-//         if id0 < self.next_id && id1 < self.next_id {
-//             self.neighbors[id0 as usize].set_bit(id1 as usize, true)
-//         }
-//         self
-//     }
+    //     pub fn add_arc(&mut self, id0: VertexIDType, id1: VertexIDType) -> &mut Self {
+    //         if id0 < self.next_id && id1 < self.next_id {
+    //             self.neighbors[id0 as usize].set_bit(id1 as usize, true)
+    //         }
+    //         self
+    //     }
 
-//     pub fn add_id(&mut self, id: VertexIDType) -> &mut Self {
-//         let id0 = self.current_vertex_id;
-//         let id1 = self.select_id(id).current_vertex_id;
-//         if self.use_edge {
-//             self.add_arc(id1, id0);
-//         }
-//         self.add_arc(id0, id1)
-//     }
+    //     pub fn add_id(&mut self, id: VertexIDType) -> &mut Self {
+    //         let id0 = self.current_vertex_id;
+    //         let id1 = self.select_id(id).current_vertex_id;
+    //         if self.use_edge {
+    //             self.add_arc(id1, id0);
+    //         }
+    //         self.add_arc(id0, id1)
+    //     }
 
-//     pub fn add_name(&mut self, name: &str) -> &mut Self {
-//         self.add_id(self.id(name))
-//     }
+    //     pub fn add_name(&mut self, name: &str) -> &mut Self {
+    //         self.add_id(self.id(name))
+    //     }
 
-//     pub fn add_room(&mut self, room: Room) -> &mut Self {
-//         let id0 = self.current_vertex_id;
-//         let id1 = self.select_room(room).current_vertex_id;
-//         if self.use_edge {
-//             self.add_arc(id1, id0);
-//         }
-//         self.add_arc(id0, id1)
-//     }
+    //     pub fn add_room(&mut self, room: Room) -> &mut Self {
+    //         let id0 = self.current_vertex_id;
+    //         let id1 = self.select_room(room).current_vertex_id;
+    //         if self.use_edge {
+    //             self.add_arc(id1, id0);
+    //         }
+    //         self.add_arc(id0, id1)
+    //     }
 
-//     pub fn toggle(&mut self, id0: VertexIDType, id1: VertexIDType) -> &mut Self {
-//         if id0 < self.next_id && id1 < self.next_id {
-//             self.toggle_neighbors[id0 as usize].set_bit(id1 as usize, true)
-//         }
-//         self
-//     }
+    //     pub fn toggle(&mut self, id0: VertexIDType, id1: VertexIDType) -> &mut Self {
+    //         if id0 < self.next_id && id1 < self.next_id {
+    //             self.toggle_neighbors[id0 as usize].set_bit(id1 as usize, true)
+    //         }
+    //         self
+    //     }
 
-//     pub fn toggle_name(&mut self, name0: &str, name1: &str) -> &mut Self {
-//         self.toggle(self.id(name0), self.id(name1))
-//     }
+    //     pub fn toggle_name(&mut self, name0: &str, name1: &str) -> &mut Self {
+    //         self.toggle(self.id(name0), self.id(name1))
+    //     }
 
-//     pub fn id(&self, name: &str) -> VertexIDType {
-//         let id = self.name2id.get(name);
-//         *id.expect(&(String::from("cannot find vertex with given name: ") + name))
-//     }
+    //     pub fn id(&self, name: &str) -> VertexIDType {
+    //         let id = self.name2id.get(name);
+    //         *id.expect(&(String::from("cannot find vertex with given name: ") + name))
+    //     }
 
-//     pub fn reset(&mut self) -> &mut Self {
-//         self.current_vertex_id = u8::MAX;
-//         self
-//     }
+    //     pub fn reset(&mut self) -> &mut Self {
+    //         self.current_vertex_id = u8::MAX;
+    //         self
+    //     }
 
-//     pub fn vertex(&self) -> &Room {
-//         &self.vertices[self.current_vertex_id as usize]
-//     }
+    //     pub fn vertex(&self) -> &Room {
+    //         &self.vertices[self.current_vertex_id as usize]
+    //     }
 
-//     pub fn vertex_of_id(&self, id: VertexIDType) -> &Room {
-//         &self.vertices[id as usize]
-//     }
+    pub(super) fn vertex_of_id(&self, id: VertexIDType) -> &Room {
+        &self.vertices[id as usize]
+    }
 
-//     pub fn vertex_of_name(&self, name: &str) -> &Room {
-//         self.vertex_of_id(self.id(name))
-//     }
+    //     pub fn vertex_of_name(&self, name: &str) -> &Room {
+    //         self.vertex_of_id(self.id(name))
+    //     }
 
-//     pub fn set_entrance(&mut self) -> &mut Self {
-//         self.entrance = self.current_vertex_id;
-//         self
-//     }
+    //     pub fn set_entrance(&mut self) -> &mut Self {
+    //         self.entrance = self.current_vertex_id;
+    //         self
+    //     }
 
-//     pub fn set_entrance_id(&mut self, id: VertexIDType) -> &mut Self {
-//         self.entrance = id;
-//         self
-//     }
+    //     pub fn set_entrance_id(&mut self, id: VertexIDType) -> &mut Self {
+    //         self.entrance = id;
+    //         self
+    //     }
 
-//     pub fn set_entrance_name(&mut self, name: &str) -> &mut Self {
-//         self.set_entrance_id(self.id(name))
-//     }
+    //     pub fn set_entrance_name(&mut self, name: &str) -> &mut Self {
+    //         self.set_entrance_id(self.id(name))
+    //     }
 
-//     pub fn set_exit(&mut self) -> &mut Self {
-//         self.exit = self.current_vertex_id;
-//         self
-//     }
+    //     pub fn set_exit(&mut self) -> &mut Self {
+    //         self.exit = self.current_vertex_id;
+    //         self
+    //     }
 
-//     pub fn set_exit_id(&mut self, id: VertexIDType) -> &mut Self {
-//         self.exit = id;
-//         self
-//     }
+    //     pub fn set_exit_id(&mut self, id: VertexIDType) -> &mut Self {
+    //         self.exit = id;
+    //         self
+    //     }
 
-//     pub fn set_exit_name(&mut self, name: &str) -> &mut Self {
-//         self.set_exit_id(self.id(name))
-//     }
-// }
+    //     pub fn set_exit_name(&mut self, name: &str) -> &mut Self {
+    //         self.set_exit_id(self.id(name))
+    //     }
+}
 
 // pub struct LevelInfo {
 //     pub max_config_numner: i32,

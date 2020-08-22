@@ -1,17 +1,19 @@
-use super::model::{Level, PlayerStat, ProbeStat, RoomType};
+use super::model::{Level, LevelInfo, PlayerCombat, PlayerStat, ProbeStat, RoomType};
 use super::{Ge, VertexIDType};
 
 use rust_dense_bitset::BitSet as _;
 use rust_dense_bitset::DenseBitSet as BitSet;
 
-// use std::collections::{HashMap, VecDeque};
+use std::collections::{HashMap, VecDeque};
 use std::fmt;
 use std::fmt::{Display, Formatter};
+use std::i16;
 use std::io;
 use std::io::Write;
 use std::ops::{AddAssign, SubAssign};
-// use std::rc::Rc;
-// use std::u8;
+use std::rc::Rc;
+use std::time::Instant;
+use std::u8;
 
 // An iterator for DenseBitSet that returns the position of each enabled bit in the set
 struct BitSetIter(BitSet);
@@ -38,7 +40,7 @@ impl Iterator for BitSetIter {
     }
 }
 
-#[derive(Clone)]
+#[derive(Clone, Eq, Hash, PartialEq)]
 struct PlayerProgress {
     visited: BitSet,
 
@@ -83,12 +85,14 @@ impl Display for PlayerProgress {
     }
 }
 
+#[derive(Clone)]
 struct PlayerProgressDiff {
     progress: PlayerProgress,
     location: VertexIDType,
 }
 
 // Score scaled by 1000
+#[derive(Clone)]
 struct PlayerScore {
     score: i32,
 }
@@ -121,6 +125,7 @@ impl Display for PlayerScore {
     }
 }
 
+#[derive(Clone)]
 struct Player {
     stat: PlayerStat,
     progress: PlayerProgress,
@@ -208,6 +213,12 @@ impl Player {
         PlayerScore { score }
     }
 
+    // fn objective(&self) -> PlayerObjective {
+    //     PlayerObjective {
+    //         hp: self.stat.hp,
+    //     }
+    // }
+
     fn print_room_list(writer: &mut dyn Write, level: &Level, list: BitSet) -> io::Result<()> {
         let mut first = true;
         for id in BitSetIter::from(list) {
@@ -240,11 +251,11 @@ impl Player {
     }
 }
 
-// impl Ge<PlayerStat> for Player {
-//     fn ge(&self, stat: &PlayerStat) -> bool {
-//         self.stat.ge(stat)
-//     }
-// }
+impl Ge<PlayerStat> for Player {
+    fn ge(&self, stat: &PlayerStat) -> bool {
+        self.stat.ge(stat)
+    }
+}
 
 impl AddAssign<&PlayerStat> for Player {
     fn add_assign(&mut self, stat: &PlayerStat) {
@@ -277,9 +288,10 @@ impl Display for Player {
     }
 }
 
+#[derive(Clone)]
 struct PlayerTrace {
     level_config: i32,
-    level: Level,
+    level: Rc<Level>,
     player: Player,
     trace: Vec<VertexIDType>,
 }
@@ -320,9 +332,29 @@ impl PlayerTrace {
         Self::print_room_list(writer, &self.level, &self.trace)
     }
 
-    // fn print(&self, writer: &mut dyn Write, init_player: &Player) -> io::Result<()> {
-    //     todo!()
-    // }
+    fn print(&self, writer: &mut dyn Write, init_player: &Player) -> io::Result<()> {
+        let mut player = PlayerTrace {
+            level_config: self.level_config,
+            level: Rc::clone(&self.level),
+            player: init_player.clone(),
+            trace: Vec::new(),
+        };
+
+        self.write(writer)?;
+        writeln!(
+            writer,
+            "--------------------------------------------------------------------------------"
+        )?;
+        for id in &self.trace {
+            player.visit(*id);
+            player.write(writer)?;
+            writeln!(
+                writer,
+                "--------------------------------------------------------------------------------"
+            )?;
+        }
+        Ok(())
+    }
 }
 
 // Track pareto frontier of traces by stat
@@ -346,9 +378,9 @@ impl OptimalStatSet {
         }
     }
 
-    fn add_all(&mut self, other: Self) {
-        for trace in other.trace {
-            self.add(trace, false);
+    fn add_all(&mut self, other: &Self) {
+        for trace in &other.trace {
+            self.add(trace.clone(), false);
         }
     }
 }
@@ -364,11 +396,12 @@ impl OptimalScore {
         !self.score.ge(score)
     }
 
-    fn add_all(&mut self, other: Self) -> bool {
+    fn add_all(&mut self, other: &Self) -> bool {
         if self.score.ge(&other.score) {
             false
         } else {
-            *self = other;
+            self.trace = other.trace.clone();
+            self.score = other.score.clone();
             true
         }
     }
@@ -390,371 +423,497 @@ impl OptimalScore {
     }
 }
 
-// // Represents state of player and choices after visiting a set of rooms
-// #[derive(Clone, Copy, Debug)]
-// struct RouteState {
-//     player: Player,
-//     neighbors: RoomSet,
-//     visited: RoomSet,
-//     last_visit: u8,
-// }
+struct SearchConfig<'a> {
+    use_estimated_max_combat: bool,
+    print_new_highscore: bool,
+    calculate_optimal_player_by_stat: bool,
+    print_local_optimal_player_by_score: bool,
+    print_local_optimal_player_by_stat: bool,
+    print_global_optimal_player_by_score: bool,
+    print_global_optimal_player_by_stat: bool,
+    writer: &'a mut dyn Write,
+    log_writer: &'a mut dyn Write,
+}
 
-// impl RouteState {
-//     fn new(player: Player, level: &Level) -> Self {
-//         let neighbors = RoomSet::from_integer(1 << level.entrance);
-//         Self {
-//             player,
-//             neighbors,
-//             visited: RoomSet::new(),
-//             last_visit: u8::MAX,
-//         }
-//     }
+struct SearchProgress {
+    total_search_count: usize,
+    current_search_count: usize,
+    timer_begin: Instant,
+}
 
-//     // Find route state after visiting a room
-//     fn visit(&mut self, room_id: u8, level: &Level, probe: &ProbeStat) {
-//         let idx = room_id as usize;
-//         self.player += probe.diff;
-//         self.neighbors |= level.neighbors[idx];
-//         self.neighbors &= !level.toggle_neighbors[idx];
-//         self.neighbors &= !self.visited;
-//         self.last_visit = room_id;
-//         self.visited.set_bit(idx, true);
-//     }
+impl SearchProgress {
+    fn new() -> Self {
+        Self {
+            total_search_count: 0,
+            current_search_count: 0,
+            timer_begin: Instant::now(),
+        }
+    }
+}
 
-//     fn previous_visited(&self) -> RoomSet {
-//         let idx = self.last_visit as usize;
-//         let mut rooms = self.visited;
-//         rooms.set_bit(idx, false);
-//         rooms
-//     }
-// }
+struct ExtendedProbeStat {
+    location: VertexIDType,
+    probe: ProbeStat,
+}
 
-// // Represents full route through a level
-// #[derive(Clone, Debug)]
-// pub struct Route {
-//     player: Player,
-//     level: Rc<Level>,
-//     trace: Vec<u8>,
-//     neighbors: RoomSet,
-//     visited: RoomSet,
-//     previous_visited: RoomSet,
-// }
+struct Search<'a> {
+    search_config: SearchConfig<'a>,
+    level_info: LevelInfo,
+    init_player: Player,
+    max_combat_probe_result: Vec<ProbeStat>,
+    search_progress: SearchProgress,
+    level_config: i32,
+    level: Rc<Level>,
+    local_optimal_player_by_score: OptimalScore,
+    global_optimal_player_by_score: OptimalScore,
+    local_optimal_player_by_stat: OptimalStatSet,
+    global_optimal_player_by_stat: OptimalStatSet,
+    probe_result: HashMap<PlayerCombat, Vec<ProbeStat>>,
+    player_progress_rc: HashMap<PlayerProgress, i32>,
+    optimal_player: HashMap<PlayerProgress, Player>, // TODO only store objective, diff?
+    clones: VecDeque<PlayerProgress>,
+}
 
-// impl Route {
-//     fn new(player: Player, level: Rc<Level>) -> Self {
-//         let neighbors = RoomSet::from_integer(1 << level.entrance);
-//         Self {
-//             player,
-//             level,
-//             trace: Vec::new(),
-//             neighbors,
-//             visited: RoomSet::new(),
-//             previous_visited: RoomSet::new(),
-//         }
-//     }
+impl<'a> Search<'a> {
+    fn probe(&mut self, combat: &PlayerCombat) -> &Vec<ProbeStat> {
+        if !self.probe_result.contains_key(combat) {
+            let mut res = Vec::new();
+            for i in 0..self.level.next_id {
+                res.push(self.level.vertex_of_id(i).probe(combat));
+            }
+            self.probe_result.insert(combat.clone(), res);
+        }
+        self.probe_result.get(combat).unwrap()
+    }
 
-//     // Add room to route
-//     fn visit(&mut self, room_id: u8) {
-//         let idx = room_id as usize;
-//         assert!(self.neighbors.get_bit(idx));
-//         let probe = self.level.vertex_of_id(room_id).probe(&self.player.into());
-//         assert!(self.player.dominate(&probe.req));
+    fn add_exit_player(&mut self, player: &Player) -> io::Result<()> {
+        if self.search_config.calculate_optimal_player_by_stat {
+            if self.local_optimal_player_by_stat.addable(&player.stat) {
+                let player_trace = self.reconstruct_trace(player);
+                self.local_optimal_player_by_stat.add(player_trace, true);
+            } else {
+                return Ok(());
+            }
+        }
 
-//         self.player += probe.diff;
-//         self.trace.push(room_id);
-//         self.neighbors |= self.level.neighbors[idx];
-//         self.neighbors &= !self.level.toggle_neighbors[idx];
-//         self.neighbors &= !self.visited;
-//         self.previous_visited = self.visited;
-//         self.visited.set_bit(idx, true);
-//     }
-// }
+        if self.local_optimal_player_by_score.addable(&player.score()) {
+            let player_trace = self.reconstruct_trace(player);
+            if self.search_config.print_new_highscore {
+                write!(self.search_config.writer, "New High ")?;
+                player_trace.write(self.search_config.writer)?;
+                writeln!(self.search_config.writer, "--------------------------------------------------------------------------------")?;
+            }
+            self.local_optimal_player_by_score.add(player_trace, true);
+        }
+        Ok(())
+    }
 
-// impl Display for Route {
-//     fn fmt(&self, f: &mut Formatter<'_>) -> Result {
-//         let mut trace_str = String::new();
-//         let mut first = true;
-//         for id in &self.trace {
-//             if first {
-//                 first = false;
-//             } else {
-//                 trace_str += ", ";
-//             }
-//             trace_str += &self.level.vertex_of_id(*id).name;
-//         }
-//         write!(f, "{}\n\nTrace: {}", self.player, trace_str)
-//     }
-// }
+    fn remove_player_progress(&mut self, progress: PlayerProgress) {
+        let mut progress = progress;
+        while progress != self.init_player.progress {
+            let rc = self
+                .player_progress_rc
+                .get_mut(&progress)
+                .expect("player_progress_rc missing progress");
+            *rc -= 1;
+            if *rc > 0 {
+                return;
+            }
+            let diff = self
+                .optimal_player
+                .get(&progress)
+                .expect("optimal_player missing progress")
+                .diff
+                .clone();
+            self.optimal_player.remove_entry(&progress);
+            progress -= &diff;
+        }
+    }
 
-// // Stores auxillary data about probing a room
-// struct ExtendedProbeStat {
-//     probe: ProbeStat,
-//     room_id: u8,
-//     free: bool,
-//     priority: bool,
-// }
+    fn expand(
+        &mut self,
+        player: &Player,
+        location: VertexIDType,
+        probe: &ProbeStat,
+    ) -> io::Result<()> {
+        let mut new_player = player.clone();
+        new_player.visit(location, &self.level, probe);
 
-// // Algorithm to search for optimal solution to level
-// pub struct Solver {
-//     level: Rc<Level>,
-//     init_state: RouteState,
-//     optimal_route: Route,
-//     optimal_route_score: i32,
-//     local_optimal_routes: Vec<Route>,
-//     optimal_visit_states: HashMap<RoomSet, RouteState>,
-//     optimal_visit_rc: HashMap<RoomSet, i32>,
-//     remaining_visits: VecDeque<RoomSet>,
-//     probe_cache: HashMap<CombatStat, Vec<ProbeStat>>,
-// }
+        if location == self.level.exit {
+            self.add_exit_player(&new_player)?;
+            return Ok(());
+        }
 
-// impl Solver {
-//     pub fn new(level: Level, init_player: Player) -> Self {
-//         let level = Rc::new(level);
-//         let init_state = RouteState::new(init_player, &level);
-//         let mut optimal_states = HashMap::new();
-//         optimal_states.insert(RoomSet::new(), init_state);
+        let new_progress = new_player.progress.clone();
+        if self.optimal_player.contains_key(&new_progress) {
+            let new_objective = new_player.stat.objective();
+            let player = self
+                .optimal_player
+                .get_mut(&new_progress)
+                .expect("optimal_player missing new_progress");
+            if player.stat.objective().ge(&new_objective) {
+                return Ok(());
+            }
+            match self.player_progress_rc.get_mut(&player.progress) {
+                Some(rc) => {
+                    *rc += 1;
+                }
+                None => {
+                    self.player_progress_rc.insert(player.progress.clone(), 1);
+                }
+            }
+            player.stat.hp = new_objective.hp;
+            player.diff = new_player.diff;
+            let progress = player.reverted_progress();
+            self.remove_player_progress(progress);
+        } else {
+            self.optimal_player.insert(new_progress.clone(), new_player);
+            match self.player_progress_rc.get_mut(&player.progress) {
+                Some(rc) => {
+                    *rc += 1;
+                }
+                None => {
+                    self.player_progress_rc.insert(player.progress.clone(), 1);
+                }
+            }
+            self.clones.push_back(new_progress);
+            self.search_progress.total_search_count += 1;
+        }
+        Ok(())
+    }
 
-//         Self {
-//             level: Rc::clone(&level),
-//             init_state,
-//             optimal_route: Route::new(init_player, Rc::clone(&level)),
-//             optimal_route_score: 0,
-//             local_optimal_routes: Vec::new(),
-//             optimal_visit_states: optimal_states,
-//             optimal_visit_rc: HashMap::new(),
-//             remaining_visits: VecDeque::new(),
-//             probe_cache: HashMap::new(),
-//         }
-//     }
+    fn reconstruct_trace(&self, player: &Player) -> PlayerTrace {
+        let mut trace = Vec::new();
+        let mut diff = player.diff.clone();
+        let mut progress = player.progress.clone();
+        while progress != self.init_player.progress {
+            trace.push(diff.location);
+            progress -= &diff;
+            diff = self
+                .optimal_player
+                .get(&progress)
+                .expect("optimal_player missing progress")
+                .diff
+                .clone();
+        }
+        trace.reverse();
+        PlayerTrace {
+            level_config: self.level_config,
+            level: Rc::clone(&self.level),
+            player: player.clone(),
+            trace,
+        }
+    }
 
-//     // Solve for optimal solution to level if one exists
-//     pub fn find_solution(mut self) -> Option<Solution> {
-//         self.optimal_visit_states
-//             .insert(self.init_state.visited, self.init_state);
-//         self.remaining_visits.push_back(self.init_state.visited);
+    fn estimate_max_combat(&mut self) -> io::Result<()> {
+        let mut max_combat = PlayerCombat::with_stat(i16::MAX, i16::MAX);
+        let mut stat = PlayerStat::default();
+        for i in 0..self.level.next_id {
+            let probe = self.level.vertex_of_id(i).probe(&max_combat);
+            let mut diff = PlayerStat::default();
+            diff.join(probe.diff);
+            stat += &diff;
+        }
+        max_combat = self.init_player.stat.as_ref().clone();
+        max_combat += stat.as_ref();
+        write!(self.search_config.writer, "Estimated {}", max_combat)?;
+        write!(self.search_config.log_writer, "Estimated {}", max_combat)?;
+        self.max_combat_probe_result = self.probe(&max_combat).clone();
+        Ok(())
+    }
 
-//         while let Some(rooms_visited) = self.remaining_visits.pop_front() {
-//             let state = self.optimal_visit_states[&rooms_visited];
-//             self.optimal_visit_rc.insert(rooms_visited, 0);
+    fn print_progress(&mut self) -> io::Result<()> {
+        if self.search_progress.current_search_count % 1000000 == 0
+            && self.search_progress.timer_begin.elapsed().as_secs() > 10
+        {
+            self.search_progress.timer_begin = Instant::now();
+            writeln!(
+                self.search_config.log_writer,
+                "Progress: {}m / {}m",
+                self.search_progress.current_search_count / 1000000,
+                self.search_progress.total_search_count / 1000000
+            )?;
+        }
+        Ok(())
+    }
 
-//             let stat = &CombatStat::from(state.player);
-//             self.cache_room_probes(stat);
-//             let probe_result = &self.probe_cache[stat];
+    fn search_config(&mut self, config: i32) -> io::Result<()> {
+        self.search_progress = SearchProgress::new();
+        self.local_optimal_player_by_score.clear();
+        self.local_optimal_player_by_stat.trace.clear();
+        self.probe_result.clear();
+        self.player_progress_rc.clear();
+        self.optimal_player.clear();
 
-//             let mut extended_probes =
-//                 Vec::<ExtendedProbeStat>::with_capacity(state.neighbors.get_weight() as usize);
-//             let was_intermediate = if state.last_visit == u8::MAX {
-//                 false
-//             } else {
-//                 self.level
-//                     .vertex_of_id(state.last_visit)
-//                     .room_type
-//                     .contains(RoomType::INTERMEDIATE)
-//             };
+        self.level_config = config;
+        self.level = Rc::new(self.level_info.build(config));
+        // TODO check for errors when building level
 
-//             let mut has_priority = false;
-//             let mut has_free = false;
-//             for neighbor in BitSetIter::from(state.neighbors) {
-//                 let idx_neighbor = neighbor as usize;
-//                 let idx_visit = state.last_visit as usize;
-//                 if was_intermediate && !self.level.neighbors[idx_visit].get_bit(idx_neighbor) {
-//                     continue;
-//                 }
+        let mut player = self.init_player.clone();
+        player.enter(&self.level);
+        let player_progress = player.progress.clone();
+        self.optimal_player.insert(player_progress.clone(), player);
+        self.clones.push_back(player_progress);
+        self.search_progress.total_search_count += 1;
 
-//                 let probe_stat = probe_result[idx_neighbor];
-//                 let available = state.player.dominate(&probe_stat.req);
-//                 if !available {
-//                     continue;
-//                 }
+        if self.search_config.use_estimated_max_combat {
+            self.estimate_max_combat()?;
+        }
 
-//                 let room_type = self.level.vertex_of_id(neighbor).room_type;
-//                 let priority = room_type.contains(RoomType::PRIORITY_ROOM);
-//                 let intermediate = room_type.contains(RoomType::INTERMEDIATE);
-//                 let free = neighbor != self.level.exit
-//                     && !intermediate
-//                     && probe_stat.damage == 0
-//                     && probe_stat.diff.is_free();
-//                 if !free && room_type.contains(RoomType::ONLY_WHEN_FREE) {
-//                     continue;
-//                 }
+        while let Some(progress) = self.clones.pop_front() {
+            self.search_progress.current_search_count += 1;
+            self.print_progress()?;
 
-//                 has_free |= free;
-//                 has_priority |= priority;
-//                 extended_probes.push(ExtendedProbeStat {
-//                     room_id: neighbor,
-//                     probe: probe_stat,
-//                     free,
-//                     priority,
-//                 });
-//             }
+            let player = self
+                .optimal_player
+                .get(&progress)
+                .expect("optimal_player missing progress")
+                .clone();
+            self.player_progress_rc.insert(progress.clone(), 0);
 
-//             if has_priority {
-//                 for room in extended_probes {
-//                     if room.priority {
-//                         self.update_optimal_route(room.room_id, &state, &room.probe);
-//                         break;
-//                     }
-//                 }
-//             } else if has_free {
-//                 for room in extended_probes {
-//                     if room.free {
-//                         self.update_optimal_route(room.room_id, &state, &room.probe);
-//                         break;
-//                     }
-//                 }
-//             } else {
-//                 for room in extended_probes {
-//                     self.update_optimal_route(room.room_id, &state, &room.probe);
-//                 }
-//             }
-//             if self.optimal_visit_rc[&rooms_visited] == 0 {
-//                 self.clean_visit_states(rooms_visited);
-//             }
-//         }
+            let probe_result = self.probe(player.stat.as_ref()).clone();
+            let mut extended_probe_result =
+                Vec::with_capacity(player.neighbors.get_weight() as usize);
+            let was_intermediate = if player.diff.location == u8::MAX {
+                false
+            } else {
+                self.level
+                    .vertex_of_id(player.diff.location)
+                    .room_type
+                    .contains(RoomType::INTERMEDIATE)
+            };
 
-//         if self.optimal_route_score == 0 {
-//             None
-//         } else {
-//             Some(Solution {
-//                 optimal_route: self.optimal_route,
-//                 local_optimal_routes: self.local_optimal_routes,
-//             })
-//         }
-//     }
+            let mut has_free_priority = false;
+            for id in BitSetIter::from(player.neighbors) {
+                if was_intermediate
+                    && !self.level.neighbors[player.diff.location as usize].get_bit(id as usize)
+                {
+                    continue;
+                }
+                let probe = &probe_result[id as usize];
+                if !player.ge(&probe.req) {
+                    continue;
+                }
+                let room_type = self.level.vertex_of_id(id).room_type;
+                let priority = room_type.contains(RoomType::PRIORITY);
+                let intermediate = room_type.contains(RoomType::INTERMEDIATE);
+                let mut free = self.search_config.use_estimated_max_combat
+                    && id != self.level.exit
+                    && !intermediate
+                    && (probe.diff.as_ref().flag & player.stat.as_ref().flag).bits() == 0
+                    && !room_type.contains(RoomType::DELAYED)
+                    && self.max_combat_probe_result[id as usize].diff.objective()
+                        == probe.diff.objective()
+                    && probe.diff.nonnegative();
 
-//     // Construct full route used to reach state
-//     fn to_route(&self, state: &RouteState) -> Route {
-//         let mut state = *state;
-//         let mut trace = Vec::new();
-//         while state.visited != self.init_state.visited {
-//             trace.push(state.last_visit);
-//             let rooms = state.previous_visited();
-//             state = self.optimal_visit_states[&rooms];
-//         }
+                #[cfg(feature = "closed-level")]
+                {
+                    free = free
+                        && !room_type.contains(RoomType::REPEATED)
+                        && !self.level.boundary_mask.get_bit(id as usize)
+                        && !self
+                            .level
+                            .boundary_mask
+                            .get_bit(player.diff.location as usize);
+                }
+                if !free
+                    && self
+                        .level
+                        .vertex_of_id(id)
+                        .room_type
+                        .contains(RoomType::ONLY_WHEN_FREE)
+                {
+                    continue;
+                }
+                if free || priority {
+                    has_free_priority = true;
+                    self.expand(&player, id, &probe)?;
+                    break;
+                }
+                extended_probe_result.push(ExtendedProbeStat {
+                    location: id,
+                    probe: probe.clone(),
+                })
+            }
+            if !has_free_priority {
+                for probe in extended_probe_result {
+                    self.expand(&player, probe.location, &probe.probe)?;
+                }
+            }
+            if *self
+                .player_progress_rc
+                .get(&progress)
+                .expect("rc missing progress")
+                == 0
+            {
+                self.remove_player_progress(progress);
+            }
+        }
+        self.global_optimal_player_by_score
+            .add_all(&self.local_optimal_player_by_score);
+        if self.search_config.calculate_optimal_player_by_stat {
+            self.global_optimal_player_by_stat
+                .add_all(&self.local_optimal_player_by_stat);
+        }
+        Ok(())
+    }
 
-//         let mut route = Route::new(self.init_state.player, Rc::clone(&self.level));
-//         for room_id in trace.into_iter().rev() {
-//             route.visit(room_id);
-//         }
-//         route
-//     }
+    fn search(&mut self) -> io::Result<()> {
+        for config in 0..self.level_info.max_config_number {
+            writeln!(self.search_config.log_writer, "Config:")?;
+            self.level_info
+                .print_config(self.search_config.log_writer, config);
 
-//     // Cache the results of probing each room with given stats
-//     fn cache_room_probes(&mut self, stat: &CombatStat) {
-//         if !self.probe_cache.contains_key(stat) {
-//             let result: Vec<ProbeStat> = (0..self.level.next_id)
-//                 .map(|i| self.level.vertex_of_id(i).probe(stat))
-//                 .collect();
-//             self.probe_cache.insert(*stat, result);
-//         }
-//     }
+            writeln!(
+                self.search_config.writer,
+                "================================================================================\n\
+                 Config:"
+            )?;
+            self.level_info
+                .print_config(self.search_config.writer, config);
+            self.search_config.writer.flush()?;
 
-//     // Clean up state related to the set of rooms visited
-//     fn clean_visit_states(&mut self, rooms: RoomSet) {
-//         let mut rooms = rooms;
-//         while rooms != self.init_state.visited {
-//             let last_visit = self.optimal_visit_states[&rooms].last_visit;
-//             let rc = *self
-//                 .optimal_visit_rc
-//                 .entry(rooms)
-//                 .and_modify(|x| *x -= 1)
-//                 .or_insert(-1);
-//             if rc <= 0 {
-//                 self.optimal_visit_states.remove(&rooms);
-//                 self.optimal_visit_rc.remove(&rooms);
-//                 if last_visit == u8::MAX {
-//                     return;
-//                 } else {
-//                     let idx = last_visit as usize;
-//                     rooms.set_bit(idx, false);
-//                 }
-//             }
-//         }
-//     }
+            let begin = Instant::now();
+            self.search_config(config)?;
 
-//     // Check whether current route is most optimal way to visit set of rooms
-//     fn update_optimal_route(&mut self, room_id: u8, state: &RouteState, probe: &ProbeStat) {
-//         let mut state = *state;
-//         let rooms = state.visited;
-//         if room_id == self.level.exit {
-//             state.visit(room_id, &self.level, probe);
+            let elapsed_secs = begin.elapsed().as_secs();
+            writeln!(
+                self.search_config.log_writer,
+                "There are {} situations searched.\n\
+                 Finished searching in {} seconds.",
+                self.search_progress.total_search_count, elapsed_secs
+            )?;
 
-//             let player = state.player;
-//             let mut local_max = true;
-//             self.local_optimal_routes.retain(|local_route| {
-//                 if local_route.player.dominate(&player) {
-//                     local_max = false;
-//                     true
-//                 } else if player.dominate(&local_route.player) && local_max {
-//                     false
-//                 } else {
-//                     true
-//                 }
-//             });
+            writeln!(
+                self.search_config.writer,
+                "================================================================================\n\
+                 There are {} situations searched.\n\
+                 Finished searching in {} seconds.",
+                 self.search_progress.total_search_count,
+                 elapsed_secs
+            )?;
 
-//             if !local_max {
-//                 return;
-//             }
+            if self.search_config.print_local_optimal_player_by_score {
+                if self.local_optimal_player_by_score.score.score > 0 {
+                    writeln!(
+                        self.search_config.writer,
+                        "The local optimal player by score is: \n\
+                        --------------------------------------------------------------------------------"
+                    )?;
+                    self.local_optimal_player_by_score
+                        .trace
+                        .print(self.search_config.writer, &self.init_player)?;
+                } else {
+                    writeln!(
+                        self.search_config.writer,
+                        "It is impossible to reach exit with this config.\n\
+                        ================================================================================"
+                    )?;
+                }
+            }
 
-//             let route = self.to_route(&state);
-//             self.local_optimal_routes.push(route.clone());
+            if self.search_config.print_local_optimal_player_by_stat {
+                writeln!(
+                    self.search_config.writer,
+                    "================================================================================\n\
+                     There are {} local optimal players by stats.\n\
+                     ================================================================================\n\
+                     --------------------------------------------------------------------------------",
+                     self.local_optimal_player_by_stat.trace.len()
+                )?;
 
-//             let score = state.player.score();
-//             if score <= self.optimal_route_score {
-//                 return;
-//             }
+                for (i, trace) in self.local_optimal_player_by_stat.trace.iter().enumerate() {
+                    write!(
+                        self.search_config.writer,
+                        "Local optimal player by score [{}] ",
+                        i + 1,
+                    )?;
+                    trace.write(self.search_config.writer)?;
+                    writeln!(
+                        self.search_config.writer,
+                        "--------------------------------------------------------------------------------"
+                    )?;
+                }
+                writeln!(
+                    self.search_config.writer,
+                    "================================================================================"
+                )?;
+            }
 
-//             // Print high score
-//             println!("New High Score {}", route);
-//             println!(
-//                 "--------------------------------------------------------------------------------"
-//             );
+            self.search_config.writer.flush()?;
+        }
 
-//             self.clean_visit_states(self.optimal_route.previous_visited);
-//             self.optimal_route = route;
-//             self.optimal_route_score = score;
-//             *self.optimal_visit_rc.entry(rooms).or_insert(0) += 1;
-//         } else {
-//             let idx = room_id as usize;
-//             let mut new_rooms = rooms;
-//             new_rooms.set_bit(idx, true);
-//             if let Some(optimal_state) = self.optimal_visit_states.get_mut(&new_rooms) {
-//                 let new_hp = state.player.hp + probe.diff.hp;
-//                 if new_hp <= optimal_state.player.hp {
-//                     return;
-//                 }
-//                 let previous_visited = optimal_state.previous_visited();
-//                 optimal_state.player.hp = new_hp;
-//                 optimal_state.last_visit = room_id;
-//                 self.clean_visit_states(previous_visited);
-//                 *self.optimal_visit_rc.entry(rooms).or_insert(0) += 1;
-//             } else {
-//                 state.visit(room_id, &self.level, probe);
-//                 self.optimal_visit_states.insert(new_rooms, state);
-//                 *self.optimal_visit_rc.entry(rooms).or_insert(0) += 1;
-//                 self.remaining_visits.push_back(new_rooms);
-//             }
-//         }
-//     }
-// }
+        if self.search_config.print_global_optimal_player_by_score {
+            writeln!(
+                self.search_config.log_writer,
+                "--------------------------------------------------------------------------------\n\
+                The global optimal player by score is: "
+            )?;
+            self.level_info.print_config(
+                self.search_config.log_writer,
+                self.global_optimal_player_by_score.trace.level_config,
+            );
+            self.global_optimal_player_by_score
+                .trace
+                .write(self.search_config.log_writer)?;
+            writeln!(
+                self.search_config.log_writer,
+                "--------------------------------------------------------------------------------"
+            )?;
 
-// pub struct Solution {
-//     optimal_route: Route,
-//     local_optimal_routes: Vec<Route>,
-// }
+            writeln!(
+                self.search_config.writer,
+                "////////////////////////////////////////////////////////////////////////////////\n\
+                The global optimal player by score is: "
+            )?;
+            self.level_info.print_config(
+                self.search_config.writer,
+                self.global_optimal_player_by_score.trace.level_config,
+            );
+            writeln!(
+                self.search_config.writer,
+                "--------------------------------------------------------------------------------"
+            )?;
+            self.global_optimal_player_by_score
+                .trace
+                .print(self.search_config.writer, &self.init_player)?;
+        }
 
-// impl Display for Solution {
-//     fn fmt(&self, f: &mut Formatter<'_>) -> Result {
-//         let mut local_route_str = String::new();
-//         for route in &self.local_optimal_routes {
-//             local_route_str += &route.to_string();
-//             local_route_str += "\n--------------------------------------------------------------------------------\n";
-//         }
+        if self.search_config.print_global_optimal_player_by_stat {
+            writeln!(
+                self.search_config.log_writer,
+                "There are {} global optimal players by stat.",
+                self.global_optimal_player_by_stat.trace.len()
+            )?;
 
-//         write!(
-//             f,
-//             "Local Optimal Routes:\n{}Most Optimal Route:\n{}",
-//             local_route_str, self.optimal_route
-//         )
-//     }
-// }
+            writeln!(
+                self.search_config.writer,
+                "////////////////////////////////////////////////////////////////////////////////\n\
+                There are {} global optimal players by stat.\n\
+                ////////////////////////////////////////////////////////////////////////////////\n\
+                --------------------------------------------------------------------------------",
+                self.global_optimal_player_by_stat.trace.len()
+            )?;
+            for (i, trace) in self.global_optimal_player_by_stat.trace.iter().enumerate() {
+                write!(
+                    self.search_config.writer,
+                    "Global optimal player by score [{}] ",
+                    i + 1,
+                )?;
+                self.level_info
+                    .print_config(self.search_config.writer, trace.level_config);
+                trace.write(self.search_config.writer)?;
+                writeln!(
+                    self.search_config.writer,
+                    "--------------------------------------------------------------------------------"
+                )?;
+            }
+            writeln!(
+                self.search_config.writer,
+                "////////////////////////////////////////////////////////////////////////////////"
+            )?;
+        }
+        self.search_config.writer.flush()?;
+        Ok(())
+    }
+}

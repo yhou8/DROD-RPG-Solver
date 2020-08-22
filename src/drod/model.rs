@@ -6,14 +6,14 @@ use rust_dense_bitset::DenseBitSet as BitSet;
 use std::collections::HashMap;
 use std::fmt;
 use std::fmt::{Display, Formatter};
-// use std::io::Write;
+use std::io::Write;
 use std::ops::{Add, AddAssign, Neg, Sub};
 // use std::u8;
 
 // Character behaviors that affect gameplay
 bitflags! {
     #[derive(Default)]
-    struct PlayerFlag: u8 {
+    pub(super) struct PlayerFlag: u8 {
         const DEAD                      = 0b00001;
         const HAS_WEAPON                = 0b00010;
         const DOUBLE_GR_WEAPON          = 0b00100;
@@ -60,7 +60,7 @@ impl Display for PlayerFlag {
     }
 }
 
-#[derive(Clone, Default)]
+#[derive(Clone, Default, Eq, Hash, PartialEq)]
 struct EquipStat {
     flag: PlayerFlag,
     atk: i16,
@@ -68,9 +68,9 @@ struct EquipStat {
 }
 
 impl EquipStat {
-    // fn nonnegative(&self) -> bool {
-    //     self.atk >= 0 && self.def >= 0
-    // }
+    fn nonnegative(&self) -> bool {
+        self.atk >= 0 && self.def >= 0
+    }
 
     fn join(&mut self, other: Self) {
         self.flag |= other.flag;
@@ -128,18 +128,26 @@ impl Display for EquipStat {
 }
 
 // Player stats that affect combat
-#[derive(Clone, Default)]
+#[derive(Clone, Default, Eq, Hash, PartialEq)]
 pub(super) struct PlayerCombat {
-    flag: PlayerFlag,
+    pub(super) flag: PlayerFlag,
     pub(super) atk: i16,
     pub(super) def: i16,
     equip: EquipStat,
 }
 
 impl PlayerCombat {
-    // fn nonnegative(&self) -> bool {
-    //     self.atk >= 0 && self.def >= 0 && self.equip.nonnegative()
-    // }
+    pub(super) fn with_stat(atk: i16, def: i16) -> Self {
+        Self {
+            atk,
+            def,
+            ..Default::default()
+        }
+    }
+
+    fn nonnegative(&self) -> bool {
+        self.atk >= 0 && self.def >= 0 && self.equip.nonnegative()
+    }
 
     fn join(&mut self, other: Self) {
         self.flag |= other.flag;
@@ -193,15 +201,36 @@ impl Neg for PlayerCombat {
     }
 }
 
-// impl Display for PlayerCombat {
-//     fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
-//         writeln!(
-//             f,
-//             "Combat, flag: {}, atk: {}, def: {}, {}",
-//             self.flag, self.atk, self.def, self.equip
-//         )
+impl Display for PlayerCombat {
+    fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
+        writeln!(
+            f,
+            "Combat, flag: {}, atk: {}, def: {}, {}",
+            self.flag, self.atk, self.def, self.equip
+        )
+    }
+}
+
+#[derive(Eq, PartialEq)]
+pub(super) struct PlayerObjective {
+    pub(super) hp: i32,
+}
+
+// impl Add for PlayerObjective {
+//     type Output = Self;
+
+//     fn add(self, other: Self) -> Self {
+//         Self {
+//             hp: self.hp + other.hp,
+//         }
 //     }
 // }
+
+impl Ge for PlayerObjective {
+    fn ge(&self, other: &Self) -> bool {
+        self.hp >= other.hp
+    }
+}
 
 // HP is shifted by 1 so that 0 is considered alive.
 // This change makes code cleaner.
@@ -216,23 +245,27 @@ pub(super) struct PlayerStat {
 }
 
 impl PlayerStat {
-    // fn nonnegative(&self) -> bool {
-    //     self.hp >= 0
-    //         && self.combat.nonnegative()
-    //         && self.gr >= 0
-    //         && self.yk >= 0
-    //         && self.gk >= 0
-    //         && self.bk >= 0
-    // }
+    pub(super) fn nonnegative(&self) -> bool {
+        self.hp >= 0
+            && self.combat.nonnegative()
+            && self.gr >= 0
+            && self.yk >= 0
+            && self.gk >= 0
+            && self.bk >= 0
+    }
 
     // Find max of two player stats
-    fn join(&mut self, other: Self) {
+    pub(super) fn join(&mut self, other: Self) {
         self.hp = self.hp.max(other.hp);
         self.combat.join(other.combat);
         self.gr = self.gr.max(other.gr);
         self.yk = self.yk.max(other.yk);
         self.gk = self.gk.max(other.gk);
         self.bk = self.bk.max(other.bk);
+    }
+
+    pub(super) fn objective(&self) -> PlayerObjective {
+        PlayerObjective { hp: self.hp }
     }
 }
 
@@ -312,32 +345,11 @@ impl Display for PlayerStat {
     }
 }
 
-// #[derive(Eq, PartialEq)]
-struct PlayerObjective {
-    hp: i32,
-}
-
-// impl Add for PlayerObjective {
-//     type Output = Self;
-
-//     fn add(self, other: Self) -> Self {
-//         Self {
-//             hp: self.hp + other.hp,
-//         }
-//     }
-// }
-
-// impl Ge for PlayerObjective {
-//     fn ge(&self, other: &Self) -> bool {
-//         self.hp >= other.hp
-//     }
-// }
-
 // Result of completing a room element
 #[derive(Clone, Default)]
 pub(super) struct ProbeStat {
     pub(super) diff: PlayerStat,
-    req: PlayerStat,
+    pub(super) req: PlayerStat,
 }
 
 impl AddAssign<&Self> for ProbeStat {
@@ -749,7 +761,7 @@ impl Room {
 // TODO split into builder
 // Represent level as a graph of rooms
 pub(super) struct Level {
-    next_id: VertexIDType,
+    pub(super) next_id: VertexIDType,
     vertices_mask: BitSet,
     pub(super) neighbors: Vec<BitSet>,
     pub(super) toggle_neighbors: Vec<BitSet>,
@@ -758,7 +770,7 @@ pub(super) struct Level {
     name2id: HashMap<String, VertexIDType>,
     vertices: Vec<Room>,
     pub(super) entrance: VertexIDType,
-    exit: VertexIDType,
+    pub(super) exit: VertexIDType,
 
     #[cfg(feature = "closed-level")]
     pub(super) boundary_mask: BitSet,
@@ -900,6 +912,21 @@ impl Level {
     //     }
 }
 
-// pub struct LevelInfo {
-//     pub max_config_numner: i32,
-// }
+// TODO support multiple configs
+pub(super) struct LevelInfo {
+    pub(super) max_config_number: i32,
+}
+
+impl LevelInfo {
+    pub(super) fn new() -> Self {
+        Self {
+            max_config_number: 1,
+        }
+    }
+
+    pub(super) fn build(&self, config: i32) -> Level {
+        todo!()
+    }
+
+    pub(super) fn print_config(&self, writer: &mut dyn Write, config: i32) {}
+}

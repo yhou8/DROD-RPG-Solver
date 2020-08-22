@@ -40,7 +40,7 @@ impl Iterator for BitSetIter {
     }
 }
 
-#[derive(Clone, Eq, Hash, PartialEq)]
+#[derive(Clone, Default, Eq, Hash, PartialEq)]
 struct PlayerProgress {
     visited: BitSet,
 
@@ -91,6 +91,15 @@ struct PlayerProgressDiff {
     location: VertexIDType,
 }
 
+impl PlayerProgressDiff {
+    fn new() -> Self {
+        Self {
+            progress: PlayerProgress::default(),
+            location: u8::MAX,
+        }
+    }
+}
+
 // Score scaled by 1000
 #[derive(Clone)]
 struct PlayerScore {
@@ -126,7 +135,7 @@ impl Display for PlayerScore {
 }
 
 #[derive(Clone)]
-struct Player {
+pub struct Player {
     stat: PlayerStat,
     progress: PlayerProgress,
     diff: PlayerProgressDiff,
@@ -137,6 +146,18 @@ struct Player {
 }
 
 impl Player {
+    pub fn new(hp: i32, atk: i16, def: i16) -> Self {
+        Self {
+            stat: PlayerStat::with_stat(atk, def),
+            progress: PlayerProgress::default(),
+            diff: PlayerProgressDiff::new(),
+            neighbors: BitSet::new(),
+
+            #[cfg(feature = "closed-level")]
+            disabled: BitSet::new(),
+        }
+    }
+
     fn reverted_progress(&self) -> PlayerProgress {
         let mut progress = self.progress.clone();
         progress -= &self.diff;
@@ -212,12 +233,6 @@ impl Player {
                 * 1000;
         PlayerScore { score }
     }
-
-    // fn objective(&self) -> PlayerObjective {
-    //     PlayerObjective {
-    //         hp: self.stat.hp,
-    //     }
-    // }
 
     fn print_room_list(writer: &mut dyn Write, level: &Level, list: BitSet) -> io::Result<()> {
         let mut first = true;
@@ -298,7 +313,12 @@ struct PlayerTrace {
 
 impl PlayerTrace {
     fn new() -> Self {
-        todo!()
+        Self {
+            level_config: 0,
+            level: Rc::new(Level::new()),
+            player: Player::new(500, 10, 10),
+            trace: Vec::new(),
+        }
     }
 
     fn visit(&mut self, location: VertexIDType) {
@@ -363,6 +383,10 @@ struct OptimalStatSet {
 }
 
 impl OptimalStatSet {
+    fn new() -> Self {
+        Self { trace: Vec::new() }
+    }
+
     fn addable(&self, stat: &PlayerStat) -> bool {
         self.trace.iter().all(|trace| !trace.player.stat.ge(stat))
     }
@@ -392,6 +416,13 @@ struct OptimalScore {
 }
 
 impl OptimalScore {
+    fn new() -> Self {
+        Self {
+            trace: PlayerTrace::new(),
+            score: PlayerScore::new(),
+        }
+    }
+
     fn addable(&self, score: &PlayerScore) -> bool {
         !self.score.ge(score)
     }
@@ -423,16 +454,32 @@ impl OptimalScore {
     }
 }
 
-struct SearchConfig<'a> {
-    use_estimated_max_combat: bool,
-    print_new_highscore: bool,
-    calculate_optimal_player_by_stat: bool,
-    print_local_optimal_player_by_score: bool,
-    print_local_optimal_player_by_stat: bool,
-    print_global_optimal_player_by_score: bool,
-    print_global_optimal_player_by_stat: bool,
+pub struct SearchConfig<'a> {
+    pub use_estimated_max_combat: bool,
+    pub print_new_highscore: bool,
+    pub calculate_optimal_player_by_stat: bool,
+    pub print_local_optimal_player_by_score: bool,
+    pub print_local_optimal_player_by_stat: bool,
+    pub print_global_optimal_player_by_score: bool,
+    pub print_global_optimal_player_by_stat: bool,
     writer: &'a mut dyn Write,
     log_writer: &'a mut dyn Write,
+}
+
+impl<'a> SearchConfig<'a> {
+    pub fn new(writer: &'a mut dyn Write, log_writer: &'a mut dyn Write) -> Self {
+        Self {
+            use_estimated_max_combat: true,
+            print_new_highscore: true,
+            calculate_optimal_player_by_stat: true,
+            print_local_optimal_player_by_score: true,
+            print_local_optimal_player_by_stat: true,
+            print_global_optimal_player_by_score: true,
+            print_global_optimal_player_by_stat: true,
+            writer,
+            log_writer,
+        }
+    }
 }
 
 struct SearchProgress {
@@ -456,7 +503,7 @@ struct ExtendedProbeStat {
     probe: ProbeStat,
 }
 
-struct Search<'a> {
+pub struct Search<'a> {
     search_config: SearchConfig<'a>,
     level_info: LevelInfo,
     init_player: Player,
@@ -475,6 +522,30 @@ struct Search<'a> {
 }
 
 impl<'a> Search<'a> {
+    pub fn new(
+        search_config: SearchConfig<'a>,
+        level_info: LevelInfo,
+        init_player: Player,
+    ) -> Self {
+        Self {
+            search_config,
+            level_info,
+            init_player,
+            max_combat_probe_result: Vec::new(),
+            search_progress: SearchProgress::new(),
+            level_config: 0,
+            level: Rc::new(Level::new()),
+            local_optimal_player_by_score: OptimalScore::new(),
+            global_optimal_player_by_score: OptimalScore::new(),
+            local_optimal_player_by_stat: OptimalStatSet::new(),
+            global_optimal_player_by_stat: OptimalStatSet::new(),
+            probe_result: HashMap::new(),
+            player_progress_rc: HashMap::new(),
+            optimal_player: HashMap::new(),
+            clones: VecDeque::new(),
+        }
+    }
+
     fn probe(&mut self, combat: &PlayerCombat) -> &Vec<ProbeStat> {
         if !self.probe_result.contains_key(combat) {
             let mut res = Vec::new();
@@ -758,7 +829,7 @@ impl<'a> Search<'a> {
         Ok(())
     }
 
-    fn search(&mut self) -> io::Result<()> {
+    pub fn search(&mut self) -> io::Result<()> {
         for config in 0..self.level_info.max_config_number {
             writeln!(self.search_config.log_writer, "Config:")?;
             self.level_info

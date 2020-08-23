@@ -1,9 +1,9 @@
 mod model;
-mod solver;
+mod search;
 
-pub use solver::LevelInfo;
-pub use solver::Search;
-pub use solver::SearchConfig;
+pub use search::LevelInfo;
+pub use search::Search;
+pub use search::SearchConfig;
 
 type VertexIDType = u8;
 

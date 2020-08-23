@@ -1,12 +1,12 @@
 use super::{Ge, VertexIDType};
 
+use bitflags::bitflags;
 use rust_dense_bitset::BitSet as _;
 use rust_dense_bitset::DenseBitSet as BitSet;
 
 use std::collections::HashMap;
 use std::fmt;
 use std::fmt::{Display, Formatter};
-use std::io::Write;
 use std::ops::{AddAssign, Neg, Sub};
 use std::u8;
 
@@ -235,8 +235,9 @@ pub(super) struct PlayerStat {
 }
 
 impl PlayerStat {
-    pub(super) fn with_stat(atk: i16, def: i16) -> Self {
+    pub(super) fn with_stat(hp: i32, atk: i16, def: i16) -> Self {
         Self {
+            hp: hp - 1,
             combat: PlayerCombat::with_stat(atk, def),
             ..Default::default()
         }
@@ -743,7 +744,7 @@ pub(super) struct Room {
 }
 
 impl Room {
-    fn new(name: String) -> Self {
+    pub(super) fn new(name: String) -> Self {
         Self {
             name,
             content: Vec::new(),
@@ -850,11 +851,11 @@ impl Level {
         self.add_arc(id0, id1)
     }
 
-    fn add_name(&mut self, name: &str) -> &mut Self {
+    pub(super) fn add_name(&mut self, name: &str) -> &mut Self {
         self.add_id(self.id(name))
     }
 
-    fn add_room(&mut self, room: Room) -> &mut Self {
+    pub(super) fn add_room(&mut self, room: Room) -> &mut Self {
         let id0 = self.current_vertex_id;
         let id1 = self.select_room(room).current_vertex_id;
         if self.use_edge {
@@ -906,7 +907,7 @@ impl Level {
         self
     }
 
-    fn set_entrance_name(&mut self, name: &str) -> &mut Self {
+    pub(super) fn set_entrance_name(&mut self, name: &str) -> &mut Self {
         self.set_entrance_id(self.id(name))
     }
 
@@ -920,47 +921,7 @@ impl Level {
         self
     }
 
-    fn set_exit_name(&mut self, name: &str) -> &mut Self {
+    pub(super) fn set_exit_name(&mut self, name: &str) -> &mut Self {
         self.set_exit_id(self.id(name))
     }
-}
-
-// TODO support multiple configs
-pub struct LevelInfo {
-    pub(super) max_config_number: i32,
-}
-
-impl LevelInfo {
-    pub fn new() -> Self {
-        Self {
-            max_config_number: 1,
-        }
-    }
-
-    pub(super) fn build(&self, config: i32) -> Level {
-        let mut level = Level::new();
-        level.add_room(Room::new("O".to_owned()));
-        level.set_entrance_name("O");
-
-        level.add_room(Room::new("exit".to_owned()));
-        level.set_exit_name("exit");
-
-        level.add_name("O").add_room(Room::new("U1".to_owned()));
-        level.add_name("O").add_room(Room::new("U2".to_owned()));
-        level.add_name("O").add_room(Room::new("U3".to_owned()));
-        level.add_name("O").add_room(Room::new("U4".to_owned()));
-        level.add_name("O").add_room(Room::new("U5".to_owned()));
-        level.add_name("O").add_room(Room::new("U6".to_owned()));
-
-        level.add_name("O").add_room(Room::new("L1".to_owned()));
-        level.add_name("O").add_room(Room::new("L2".to_owned()));
-        level.add_name("O").add_room(Room::new("L3".to_owned()));
-        level.add_name("O").add_room(Room::new("L4".to_owned()));
-        level.add_name("O").add_room(Room::new("L5".to_owned()));
-
-        level.add_name("O").add_room(Room::new("Boss".to_owned()));
-        level
-    }
-
-    pub(super) fn print_config(&self, writer: &mut dyn Write, config: i32) {}
 }

@@ -3,12 +3,17 @@ name = "drod-rpg-solver"
 version = "0.1.0"
 authors = ["Yusheng Hou <yhou2000@gmail.com>"]
 edition = "2018"
+description = "Find optimal solutions for DROD RPG holds."
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
 bitflags = "1.0"
-rust-dense-bitset = "0.1.1"
+lazy_static = "1.0"
+rust-dense-bitset = "0.1"
+serde_json = "1.0"
+structopt = { version = "0.3", default-features = false }
 
 [features]
+default = []
 closed-level = []

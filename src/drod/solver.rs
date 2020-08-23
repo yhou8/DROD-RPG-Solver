@@ -1,8 +1,10 @@
-use super::model::{Level, LevelInfo, PlayerCombat, PlayerStat, ProbeStat, RoomType};
+use super::model::{Level, PlayerCombat, PlayerStat, ProbeStat, Room, RoomType};
 use super::{Ge, VertexIDType};
 
 use rust_dense_bitset::BitSet as _;
 use rust_dense_bitset::DenseBitSet as BitSet;
+use serde_json::Value;
+use structopt::StructOpt;
 
 use std::collections::{HashMap, VecDeque};
 use std::fmt;
@@ -148,7 +150,7 @@ pub struct Player {
 impl Player {
     pub fn new(hp: i32, atk: i16, def: i16) -> Self {
         Self {
-            stat: PlayerStat::with_stat(atk, def),
+            stat: PlayerStat::with_stat(hp, atk, def),
             progress: PlayerProgress::default(),
             diff: PlayerProgressDiff::new(),
             neighbors: BitSet::new(),
@@ -454,32 +456,65 @@ impl OptimalScore {
     }
 }
 
-pub struct SearchConfig<'a> {
-    pub use_estimated_max_combat: bool,
-    pub print_new_highscore: bool,
-    pub calculate_optimal_player_by_stat: bool,
-    pub print_local_optimal_player_by_score: bool,
-    pub print_local_optimal_player_by_stat: bool,
-    pub print_global_optimal_player_by_score: bool,
-    pub print_global_optimal_player_by_stat: bool,
-    writer: &'a mut dyn Write,
-    log_writer: &'a mut dyn Write,
-}
+#[derive(StructOpt)]
+pub struct SearchConfig {
+    /// Estimate when rooms cannot be improved by increasing stats
+    #[structopt(
+        name = "use_max_combat",
+        long,
+        default_value = "true",
+        parse(try_from_str)
+    )]
+    use_estimated_max_combat: bool,
 
-impl<'a> SearchConfig<'a> {
-    pub fn new(writer: &'a mut dyn Write, log_writer: &'a mut dyn Write) -> Self {
-        Self {
-            use_estimated_max_combat: true,
-            print_new_highscore: true,
-            calculate_optimal_player_by_stat: true,
-            print_local_optimal_player_by_score: true,
-            print_local_optimal_player_by_stat: true,
-            print_global_optimal_player_by_score: true,
-            print_global_optimal_player_by_stat: true,
-            writer,
-            log_writer,
-        }
-    }
+    /// Output new highscores when reaching exit room
+    #[structopt(long, default_value = "false", parse(try_from_str))]
+    print_new_highscore: bool,
+
+    /// Calculate scores for the pareto optimal set of stats and keys
+    #[structopt(
+        name = "calculate_by_stat",
+        long,
+        default_value = "false",
+        parse(try_from_str)
+    )]
+    calculate_optimal_player_by_stat: bool,
+
+    /// Output optimal scores for each level config
+    #[structopt(
+        name = "print_local_score",
+        long,
+        default_value = "false",
+        parse(try_from_str)
+    )]
+    print_local_optimal_player_by_score: bool,
+
+    /// Output pareto scores for each level config
+    #[structopt(
+        name = "print_local_stat",
+        long,
+        default_value = "false",
+        parse(try_from_str)
+    )]
+    print_local_optimal_player_by_stat: bool,
+
+    /// Output optimal score across all level configs
+    #[structopt(
+        name = "print_global_score",
+        long,
+        default_value = "true",
+        parse(try_from_str)
+    )]
+    print_global_optimal_player_by_score: bool,
+
+    /// Output pareto scores across all level configs
+    #[structopt(
+        name = "print_global_stat",
+        long,
+        default_value = "false",
+        parse(try_from_str)
+    )]
+    print_global_optimal_player_by_stat: bool,
 }
 
 struct SearchProgress {
@@ -503,8 +538,54 @@ struct ExtendedProbeStat {
     probe: ProbeStat,
 }
 
+// TODO support multiple configs
+pub struct LevelInfo {
+    pub(super) max_config_number: i32,
+    data: Value,
+}
+
+impl LevelInfo {
+    pub fn new(data: Value) -> io::Result<Self> {
+        Ok(Self {
+            max_config_number: 1,
+            data,
+        })
+    }
+
+    fn init_player(&self) -> Player {
+        Player::new(500, 10, 10)
+    }
+
+    pub(super) fn build(&self, config: i32) -> Level {
+        let mut level = Level::new();
+        level.add_room(Room::new("O".to_owned()));
+        level.set_entrance_name("O");
+
+        level.add_room(Room::new("exit".to_owned()));
+        level.set_exit_name("exit");
+
+        level.add_name("O").add_room(Room::new("U1".to_owned()));
+        level.add_name("O").add_room(Room::new("U2".to_owned()));
+        level.add_name("O").add_room(Room::new("U3".to_owned()));
+        level.add_name("O").add_room(Room::new("U4".to_owned()));
+        level.add_name("O").add_room(Room::new("U5".to_owned()));
+        level.add_name("O").add_room(Room::new("U6".to_owned()));
+
+        level.add_name("O").add_room(Room::new("L1".to_owned()));
+        level.add_name("O").add_room(Room::new("L2".to_owned()));
+        level.add_name("O").add_room(Room::new("L3".to_owned()));
+        level.add_name("O").add_room(Room::new("L4".to_owned()));
+        level.add_name("O").add_room(Room::new("L5".to_owned()));
+
+        level.add_name("O").add_room(Room::new("Boss".to_owned()));
+        level
+    }
+
+    pub(super) fn print_config(&self, writer: &mut dyn Write, config: i32) {}
+}
+
 pub struct Search<'a> {
-    search_config: SearchConfig<'a>,
+    search_config: SearchConfig,
     level_info: LevelInfo,
     init_player: Player,
     max_combat_probe_result: Vec<ProbeStat>,
@@ -519,14 +600,18 @@ pub struct Search<'a> {
     player_progress_rc: HashMap<PlayerProgress, i32>,
     optimal_player: HashMap<PlayerProgress, Player>, // TODO only store objective, diff?
     clones: VecDeque<PlayerProgress>,
+    writer: &'a mut dyn Write,
+    log_writer: &'a mut dyn Write,
 }
 
 impl<'a> Search<'a> {
     pub fn new(
-        search_config: SearchConfig<'a>,
+        search_config: SearchConfig,
         level_info: LevelInfo,
-        init_player: Player,
+        writer: &'a mut dyn Write,
+        log_writer: &'a mut dyn Write,
     ) -> Self {
+        let init_player = level_info.init_player();
         Self {
             search_config,
             level_info,
@@ -543,6 +628,8 @@ impl<'a> Search<'a> {
             player_progress_rc: HashMap::new(),
             optimal_player: HashMap::new(),
             clones: VecDeque::new(),
+            writer,
+            log_writer,
         }
     }
 
@@ -570,9 +657,9 @@ impl<'a> Search<'a> {
         if self.local_optimal_player_by_score.addable(&player.score()) {
             let player_trace = self.reconstruct_trace(player);
             if self.search_config.print_new_highscore {
-                write!(self.search_config.writer, "New High ")?;
-                player_trace.write(self.search_config.writer)?;
-                writeln!(self.search_config.writer, "--------------------------------------------------------------------------------")?;
+                write!(self.writer, "New High ")?;
+                player_trace.write(self.writer)?;
+                writeln!(self.writer, "--------------------------------------------------------------------------------")?;
             }
             self.local_optimal_player_by_score.add(player_trace, true);
         }
@@ -687,8 +774,8 @@ impl<'a> Search<'a> {
         }
         max_combat = self.init_player.stat.as_ref().clone();
         max_combat += stat.as_ref();
-        write!(self.search_config.writer, "Estimated {}", max_combat)?;
-        write!(self.search_config.log_writer, "Estimated {}", max_combat)?;
+        write!(self.writer, "Estimated {}", max_combat)?;
+        write!(self.log_writer, "Estimated {}", max_combat)?;
         self.max_combat_probe_result = self.probe(&max_combat).clone();
         Ok(())
     }
@@ -699,7 +786,7 @@ impl<'a> Search<'a> {
         {
             self.search_progress.timer_begin = Instant::now();
             writeln!(
-                self.search_config.log_writer,
+                self.log_writer,
                 "Progress: {}m / {}m",
                 self.search_progress.current_search_count / 1000000,
                 self.search_progress.total_search_count / 1000000
@@ -831,32 +918,30 @@ impl<'a> Search<'a> {
 
     pub fn search(&mut self) -> io::Result<()> {
         for config in 0..self.level_info.max_config_number {
-            writeln!(self.search_config.log_writer, "Config:")?;
-            self.level_info
-                .print_config(self.search_config.log_writer, config);
+            writeln!(self.log_writer, "Config:")?;
+            self.level_info.print_config(self.log_writer, config);
 
             writeln!(
-                self.search_config.writer,
+                self.writer,
                 "================================================================================\n\
                  Config:"
             )?;
-            self.level_info
-                .print_config(self.search_config.writer, config);
-            self.search_config.writer.flush()?;
+            self.level_info.print_config(self.writer, config);
+            self.writer.flush()?;
 
             let begin = Instant::now();
             self.search_config(config)?;
 
             let elapsed_secs = begin.elapsed().as_secs();
             writeln!(
-                self.search_config.log_writer,
+                self.log_writer,
                 "There are {} situations searched.\n\
                  Finished searching in {} seconds.",
                 self.search_progress.total_search_count, elapsed_secs
             )?;
 
             writeln!(
-                self.search_config.writer,
+                self.writer,
                 "================================================================================\n\
                  There are {} situations searched.\n\
                  Finished searching in {} seconds.",
@@ -867,16 +952,16 @@ impl<'a> Search<'a> {
             if self.search_config.print_local_optimal_player_by_score {
                 if self.local_optimal_player_by_score.score.score > 0 {
                     writeln!(
-                        self.search_config.writer,
+                        self.writer,
                         "The local optimal player by score is: \n\
                         --------------------------------------------------------------------------------"
                     )?;
                     self.local_optimal_player_by_score
                         .trace
-                        .print(self.search_config.writer, &self.init_player)?;
+                        .print(self.writer, &self.init_player)?;
                 } else {
                     writeln!(
-                        self.search_config.writer,
+                        self.writer,
                         "It is impossible to reach exit with this config.\n\
                         ================================================================================"
                     )?;
@@ -885,7 +970,7 @@ impl<'a> Search<'a> {
 
             if self.search_config.print_local_optimal_player_by_stat {
                 writeln!(
-                    self.search_config.writer,
+                    self.writer,
                     "================================================================================\n\
                      There are {} local optimal players by stats.\n\
                      ================================================================================\n\
@@ -894,71 +979,67 @@ impl<'a> Search<'a> {
                 )?;
 
                 for (i, trace) in self.local_optimal_player_by_stat.trace.iter().enumerate() {
-                    write!(
-                        self.search_config.writer,
-                        "Local optimal player by score [{}] ",
-                        i + 1,
-                    )?;
-                    trace.write(self.search_config.writer)?;
+                    write!(self.writer, "Local optimal player by score [{}] ", i + 1,)?;
+                    trace.write(self.writer)?;
                     writeln!(
-                        self.search_config.writer,
+                        self.writer,
                         "--------------------------------------------------------------------------------"
                     )?;
                 }
                 writeln!(
-                    self.search_config.writer,
+                    self.writer,
                     "================================================================================"
                 )?;
             }
 
-            self.search_config.writer.flush()?;
+            self.writer.flush()?;
         }
 
         if self.search_config.print_global_optimal_player_by_score {
             writeln!(
-                self.search_config.log_writer,
+                self.log_writer,
                 "--------------------------------------------------------------------------------\n\
                 The global optimal player by score is: "
             )?;
             self.level_info.print_config(
-                self.search_config.log_writer,
+                self.log_writer,
                 self.global_optimal_player_by_score.trace.level_config,
             );
             self.global_optimal_player_by_score
                 .trace
-                .write(self.search_config.log_writer)?;
+                .write(self.log_writer)?;
             writeln!(
-                self.search_config.log_writer,
+                self.log_writer,
                 "--------------------------------------------------------------------------------"
             )?;
 
             writeln!(
-                self.search_config.writer,
+                self.writer,
                 "////////////////////////////////////////////////////////////////////////////////\n\
                 The global optimal player by score is: "
             )?;
             self.level_info.print_config(
-                self.search_config.writer,
+                self.writer,
                 self.global_optimal_player_by_score.trace.level_config,
             );
             writeln!(
-                self.search_config.writer,
+                self.writer,
                 "--------------------------------------------------------------------------------"
             )?;
             self.global_optimal_player_by_score
                 .trace
-                .print(self.search_config.writer, &self.init_player)?;
+                .print(self.writer, &self.init_player)?;
         }
 
         if self.search_config.print_global_optimal_player_by_stat {
             writeln!(
-                self.search_config.log_writer,
+                self.log_writer,
                 "There are {} global optimal players by stat.",
                 self.global_optimal_player_by_stat.trace.len()
             )?;
 
             writeln!(
-                self.search_config.writer,
+                self.writer,
                 "////////////////////////////////////////////////////////////////////////////////\n\
                 There are {} global optimal players by stat.\n\
                 ////////////////////////////////////////////////////////////////////////////////\n\
@@ -966,25 +1047,21 @@ impl<'a> Search<'a> {
                 self.global_optimal_player_by_stat.trace.len()
             )?;
             for (i, trace) in self.global_optimal_player_by_stat.trace.iter().enumerate() {
-                write!(
-                    self.search_config.writer,
-                    "Global optimal player by score [{}] ",
-                    i + 1,
-                )?;
+                write!(self.writer, "Global optimal player by score [{}] ", i + 1,)?;
                 self.level_info
-                    .print_config(self.search_config.writer, trace.level_config);
-                trace.write(self.search_config.writer)?;
+                    .print_config(self.writer, trace.level_config);
+                trace.write(self.writer)?;
                 writeln!(
-                    self.search_config.writer,
+                    self.writer,
                     "--------------------------------------------------------------------------------"
                 )?;
             }
             writeln!(
-                self.search_config.writer,
+                self.writer,
                 "////////////////////////////////////////////////////////////////////////////////"
             )?;
         }
-        self.search_config.writer.flush()?;
+        self.writer.flush()?;
         Ok(())
     }
 }

@@ -1,35 +1,48 @@
-#[macro_use]
 extern crate bitflags;
+extern crate lazy_static;
 extern crate rust_dense_bitset;
+extern crate serde_json;
+extern crate structopt;
 
 mod drod;
-use drod::{LevelInfo, Player, Search, SearchConfig};
 
+use drod::{LevelInfo, Search, SearchConfig};
+
+use structopt::StructOpt;
+
+use std::fs;
 use std::fs::File;
 use std::io;
+use std::path::PathBuf;
+
+#[derive(StructOpt)]
+#[structopt(no_version, about)]
+struct Config {
+    #[structopt(flatten)]
+    search_config: SearchConfig,
+
+    /// Input file
+    #[structopt(parse(from_os_str))]
+    input: PathBuf,
+
+    /// Output file
+    #[structopt(parse(from_os_str))]
+    output: PathBuf,
+}
 
 fn main() -> io::Result<()> {
-    // TODO read output path from args
-    let output_path = "output.txt";
-    let mut output_file = File::create(output_path)?;
+    let config = Config::from_args();
+    let input_data = fs::read(config.input)?;
+    let json_value = serde_json::from_slice(&input_data)?;
+    let level_info = LevelInfo::new(json_value)?;
+
+    let mut output_file = File::create(config.output)?;
     let mut stdout = io::stdout();
-
-    // TODO read config from args
-    let mut search_config = SearchConfig::new(&mut output_file, &mut stdout);
-    search_config.print_new_highscore = false;
-    search_config.calculate_optimal_player_by_stat = false;
-    search_config.print_local_optimal_player_by_score = false;
-    search_config.print_local_optimal_player_by_stat = false;
-    search_config.print_global_optimal_player_by_stat = false;
-    let search_config = search_config;
-
-    // TODO read level layout from file
-    let level_info = LevelInfo::new();
-
-    // TODO read initial stats from file
-    let init_player = Player::new(500, 10, 10);
-
-    let mut search = Search::new(search_config, level_info, init_player);
-    search.search()?;
-    Ok(())
+    let mut search = Search::new(
+        config.search_config,
+        level_info,
+        &mut output_file,
+        &mut stdout,
+    );
+    search.search()
 }

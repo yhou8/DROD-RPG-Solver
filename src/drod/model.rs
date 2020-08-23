@@ -925,3 +925,38 @@ impl Level {
         self.set_exit_id(self.id(name))
     }
 }
+
+// Score scaled by 1000
+#[derive(Clone)]
+pub(super) struct PlayerScore {
+    pub(super) score: i32,
+}
+
+impl PlayerScore {
+    pub(super) fn new() -> Self {
+        Self { score: 0 }
+    }
+}
+
+impl Ge for PlayerScore {
+    fn ge(&self, other: &Self) -> bool {
+        self.score >= other.score
+    }
+}
+
+impl Display for PlayerScore {
+    fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
+        let score_modk = self.score % 1000;
+        let tenth = if score_modk < 100 { "0" } else { "" };
+        let hundredth = if score_modk < 10 { "0" } else { "" };
+        write!(
+            f,
+            "{}.{}{}{}",
+            self.score / 1000,
+            tenth,
+            hundredth,
+            score_modk
+        )
+    }
+}
+

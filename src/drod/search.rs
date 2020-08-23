@@ -1,4 +1,4 @@
-use super::model::{Level, PlayerCombat, PlayerStat, ProbeStat, Room, RoomType};
+use super::model::{Level, PlayerCombat, PlayerScore, PlayerStat, ProbeStat, Room, RoomType};
 use super::{Ge, VertexIDType};
 
 use rust_dense_bitset::BitSet as _;
@@ -99,40 +99,6 @@ impl PlayerProgressDiff {
             progress: PlayerProgress::default(),
             location: u8::MAX,
         }
-    }
-}
-
-// Score scaled by 1000
-#[derive(Clone)]
-struct PlayerScore {
-    score: i32,
-}
-
-impl PlayerScore {
-    fn new() -> Self {
-        Self { score: 0 }
-    }
-}
-
-impl Ge for PlayerScore {
-    fn ge(&self, other: &Self) -> bool {
-        self.score >= other.score
-    }
-}
-
-impl Display for PlayerScore {
-    fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
-        let score_modk = self.score % 1000;
-        let tenth = if score_modk < 100 { "0" } else { "" };
-        let hundredth = if score_modk < 10 { "0" } else { "" };
-        write!(
-            f,
-            "{}.{}{}{}",
-            self.score / 1000,
-            tenth,
-            hundredth,
-            score_modk
-        )
     }
 }
 

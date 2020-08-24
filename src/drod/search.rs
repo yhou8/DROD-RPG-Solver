@@ -1,9 +1,8 @@
-use super::model::{Level, PlayerCombat, PlayerScore, PlayerStat, ProbeStat, Room, RoomType};
+use super::model::{Level, LevelInfo, PlayerCombat, PlayerScore, PlayerStat, ProbeStat, RoomType};
 use super::{Ge, VertexIDType};
 
 use rust_dense_bitset::BitSet as _;
 use rust_dense_bitset::DenseBitSet as BitSet;
-use serde_json::Value;
 use structopt::StructOpt;
 
 use std::collections::{HashMap, VecDeque};
@@ -102,7 +101,16 @@ impl PlayerProgressDiff {
     }
 }
 
-#[derive(Clone)]
+impl Default for PlayerProgressDiff {
+    fn default() -> Self {
+        Self {
+            progress: PlayerProgress::default(),
+            location: u8::MAX,
+        }
+    }
+}
+
+#[derive(Clone, Default)]
 pub struct Player {
     stat: PlayerStat,
     progress: PlayerProgress,
@@ -504,52 +512,6 @@ struct ExtendedProbeStat {
     probe: ProbeStat,
 }
 
-// TODO support multiple configs
-pub struct LevelInfo {
-    pub(super) max_config_number: i32,
-    data: Value,
-}
-
-impl LevelInfo {
-    pub fn new(data: Value) -> io::Result<Self> {
-        Ok(Self {
-            max_config_number: 1,
-            data,
-        })
-    }
-
-    fn init_player(&self) -> Player {
-        Player::new(500, 10, 10)
-    }
-
-    pub(super) fn build(&self, config: i32) -> Level {
-        let mut level = Level::new();
-        level.add_room(Room::new("O".to_owned()));
-        level.set_entrance_name("O");
-
-        level.add_room(Room::new("exit".to_owned()));
-        level.set_exit_name("exit");
-
-        level.add_name("O").add_room(Room::new("U1".to_owned()));
-        level.add_name("O").add_room(Room::new("U2".to_owned()));
-        level.add_name("O").add_room(Room::new("U3".to_owned()));
-        level.add_name("O").add_room(Room::new("U4".to_owned()));
-        level.add_name("O").add_room(Room::new("U5".to_owned()));
-        level.add_name("O").add_room(Room::new("U6".to_owned()));
-
-        level.add_name("O").add_room(Room::new("L1".to_owned()));
-        level.add_name("O").add_room(Room::new("L2".to_owned()));
-        level.add_name("O").add_room(Room::new("L3".to_owned()));
-        level.add_name("O").add_room(Room::new("L4".to_owned()));
-        level.add_name("O").add_room(Room::new("L5".to_owned()));
-
-        level.add_name("O").add_room(Room::new("Boss".to_owned()));
-        level
-    }
-
-    pub(super) fn print_config(&self, writer: &mut dyn Write, config: i32) {}
-}
-
 pub struct Search<'a> {
     search_config: SearchConfig,
     level_info: LevelInfo,
@@ -577,7 +539,10 @@ impl<'a> Search<'a> {
         writer: &'a mut dyn Write,
         log_writer: &'a mut dyn Write,
     ) -> Self {
-        let init_player = level_info.init_player();
+        let init_player = Player {
+            stat: level_info.init_player(),
+            ..Default::default()
+        };
         Self {
             search_config,
             level_info,

@@ -1,7 +1,7 @@
 mod model;
 mod search;
 
-pub use search::LevelInfo;
+pub use model::LevelInfo;
 pub use search::Search;
 pub use search::SearchConfig;
 
